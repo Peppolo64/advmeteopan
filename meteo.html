@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="it" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Meteo Avanzata - Dark Mode</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <style>
+        /* Forza il tema scuro sui controlli nativi del browser */
+        :root { color-scheme: dark; }
+        
+        /* Filtro avanzato per far diventare "Dark" la mappa cartografica di OpenStreetMap */
+        .dark-map .leaflet-layer,
+        .dark-map .leaflet-control-zoom-in,
+        .dark-map .leaflet-control-zoom-out,
+        .dark-map .leaflet-control-attribution {
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 p-6 font-sans antialiased" onload="initDashboard()">
+
+    <div id="mapModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex justify-center items-center p-4">
+        <div class="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 w-full max-w-4xl flex flex-col overflow-hidden">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2"><span>🗺️</span> Clicca per selezionare il punto</h3>
+                <button onclick="closeMapModal()" class="text-slate-400 hover:text-white transition text-3xl leading-none">&times;</button>
+            </div>
+            <div id="map" class="w-full h-[65vh] dark-map z-0"></div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto space-y-8">
+        
+        <div class="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
+            <h1 class="text-2xl font-bold mb-4 text-white">Pannello di Controllo Meteo</h1>
+            
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300">Data</label>
+                    <input type="date" id="dateInput" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300">Località Predefinite</label>
+                    <select id="presetSelect" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" onchange="loadPreset()">
+                        <option value="38.1157,13.3615">Palermo</option>
+                        <option value="37.882734, 13.377292">Ficuzza (Paese)</option>
+                        <option value="37.855219, 13.395388">Rocca Busambra</option>
+                        <option value="37.978765, 13.290819">Piana degli Albanesi</option>
+                        <option value="37.993958, 13.263495">Monte Pizzuta</option>
+                        <option value="37.950206, 13.609353">Eremo di San Felice</option> 
+                        <option value="37.875479, 14.027481">Piano Battaglia</option>
+                        <option value="37.894083, 14.025414">Pizzo Carbonara</option>
+                        <option value="37.895988, 14.066772">Piano Pomo</option>
+                        <option value="37.799139, 15.039498">Piano Provenzana</option>
+                        <option value="37.762688, 15.021520">Pizzo Deneri</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300">Latitudine</label>
+                    <input type="text" id="latInput" oninput="handleCoordPaste(event)" placeholder="Es. 38.1157 o 38°06'56&quot;N" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300">Longitudine</label>
+                    <input type="text" id="lonInput" placeholder="Es. 13.3615 o 13°21'41&quot;E" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                
+                <div>
+                    <button onclick="openMapModal()" class="w-full bg-slate-600 text-white font-semibold p-2 rounded hover:bg-slate-500 transition shadow border border-slate-500 flex items-center justify-center gap-2">
+                        🗺️ Mappa
+                    </button>
+                </div>
+
+                <div>
+                    <button onclick="updateDashboard()" class="w-full bg-blue-600 text-white font-semibold p-2 rounded hover:bg-blue-500 transition shadow-lg">
+                        Aggiorna
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="flex flex-col md:flex-row md:items-end justify-between mb-4 border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-white">Siti Commerciali</h2>
+                <div class="mt-2 md:mt-0">
+                    <span id="detectedCityLabel" class="text-sm px-3 py-1 bg-slate-700 text-slate-300 rounded-full border border-slate-600 shadow-inner">
+                        Inizializzazione in corso...
+                    </span>
+                </div>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">Nota: La data non ha effetto su questi iframe, mostrano la previsione corrente del sito remoto.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">3bMeteo</h3>
+                    <a id="link3b" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="treBMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
+                </div>
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">IlMeteo.it</h3>
+                    <a id="linkIlMeteo" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="ilMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
+                </div>
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">MeteoAM</h3>
+                    <a id="linkMeteoAm" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="meteoAmIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+            <div class="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
+                <h2 class="text-lg font-bold border-b border-slate-600 pb-2 mb-3 text-white">Bollettino Open-Meteo</h2>
+                <div id="openMeteoData" class="text-sm space-y-2 text-slate-300">
+                    <p class="text-slate-500 italic">In attesa di dati...</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
+                <h2 class="text-lg font-bold border-b border-slate-600 pb-2 mb-3 text-white">Sole e Luna</h2>
+                <div id="astroData" class="text-sm space-y-2 text-slate-300">
+                    <p class="text-slate-500 italic">In attesa di dati...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 border-t border-slate-700 pt-6">
+            <h2 class="text-xl font-bold text-white mb-4">Suite Avanzata Meteoblue</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[750px] flex flex-col">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Meteogramma</h3>
+                    <a id="linkMeteogram" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="meteoblueMeteogramIframe" width="100%" height="100%" frameborder="0" scrolling="NO" allowtransparency="true" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" style="border: 0;overflow: hidden;" class="rounded flex-grow bg-white"></iframe>
+                </div>
+
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[750px] flex flex-col">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Seeing (Astronomia)</h3>
+                    <a id="linkSeeing" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="meteoblueSeeingIframe" width="100%" height="100%" frameborder="0" scrolling="NO" allowtransparency="true" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" style="border: 0;overflow: hidden;" class="rounded flex-grow bg-white"></iframe>
+                </div>
+
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[750px] flex flex-col col-span-1 md:col-span-2">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Mappa Interattiva</h3>
+                    <a id="linkMap" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="meteoblueMapIframe" width="100%" height="100%" frameborder="0" scrolling="NO" allowtransparency="true" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" style="border: 0;overflow: hidden;" class="rounded flex-grow"></iframe>
+                </div>
+                
+            </div>
+        </div>
+
+        <div class="mt-8 border-t border-slate-700 pt-6 pb-12">
+            <h2 class="text-xl font-bold text-white mb-4">Altri Modelli e Satelliti</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[800px] flex flex-col col-span-1 md:col-span-2">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Windy (Radar/Satellite)</h3>
+                    <a id="linkWindy" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="windyIframe" width="100%" height="100%" frameborder="0" src="" class="rounded flex-grow"></iframe>
+                </div>
+                
+                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[650px] overflow-hidden col-span-1 md:col-span-2 flex flex-col items-center">
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Sat24 (Italia Satellite Loop)</h3>
+                    <a href="https://it.sat24.com/it/it" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">https://it.sat24.com/it/it</a>
+                    <iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" src="https://widgets.meteox.com/it-IT/widgets/radar/country/it/satellite" style="width:100%!important;max-width:600px!important;max-height:600px!important;height:100%!important;padding:0px;border:none!important;box-sizing:border-box!important;" scrolling="no" frameborder="0"></iframe>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let map = null;
+        let mapMarker = null;
+
+        // ==========================================
+        // GESTIONE MAPPA INTERATTIVA (Leaflet)
+        // ==========================================
+        function openMapModal() {
+            document.getElementById('mapModal').classList.remove('hidden');
+            
+            let startLat = parseFloat(document.getElementById('latInput').value) || 41.8719;
+            let startLon = parseFloat(document.getElementById('lonInput').value) || 12.5674;
+
+            if (!map) {
+                map = L.map('map').setView([startLat, startLon], 6);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                if (!isNaN(parseFloat(document.getElementById('latInput').value))) {
+                    mapMarker = L.marker([startLat, startLon]).addTo(map);
+                }
+
+                map.on('click', function(e) {
+                    const lat = e.latlng.lat.toFixed(5);
+                    const lon = e.latlng.lng.toFixed(5);
+                    
+                    document.getElementById('latInput').value = lat;
+                    document.getElementById('lonInput').value = lon;
+                    
+                    if (mapMarker) {
+                        mapMarker.setLatLng(e.latlng);
+                    } else {
+                        mapMarker = L.marker(e.latlng).addTo(map);
+                    }
+                    
+                    document.getElementById('presetSelect').value = "";
+                    
+                    setTimeout(() => {
+                        closeMapModal();
+                        updateDashboard();
+                    }, 400);
+                });
+            } else {
+                map.setView([startLat, startLon], map.getZoom());
+                if (mapMarker) {
+                    mapMarker.setLatLng([startLat, startLon]);
+                }
+            }
+
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 100);
+        }
+
+        function closeMapModal() {
+            document.getElementById('mapModal').classList.add('hidden');
+        }
+
+        // ==========================================
+        // PARSER COORDINATE E HANDLER
+        // ==========================================
+        function initDashboard() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateInput').value = today;
+            document.getElementById('presetSelect').value = "38.1157,13.3615";
+            loadPreset();
+        }
+
+        function loadPreset() {
+            const select = document.getElementById('presetSelect');
+            if (select.value) {
+                const [lat, lon] = select.value.split(',');
+                document.getElementById('latInput').value = lat;
+                document.getElementById('lonInput').value = lon;
+                updateDashboard();
+            }
+        }
+
+        function parseCoordinate(coordStr) {
+            if (!coordStr) return NaN;
+            coordStr = coordStr.trim().replace(',', '.'); 
+            if (/[°'"NSEWNO]/i.test(coordStr)) {
+                const regex = /(\d+)[°\s]+(\d+)['\s]+([\d\.]+)[s"”'’]*\s*([NSEWNO])/i;
+                const match = coordStr.match(regex);
+                if (match) {
+                    let deg = parseFloat(match[1]);
+                    let min = parseFloat(match[2]);
+                    let sec = parseFloat(match[3]);
+                    let dir = match[4].toUpperCase();
+                    let dec = deg + (min / 60) + (sec / 3600);
+                    if (dir === 'S' || dir === 'W' || dir === 'O') dec = dec * -1;
+                    return dec;
+                }
+            }
+            return parseFloat(coordStr);
+        }
+
+        function handleCoordPaste(event) {
+            let val = event.target.value.trim();
+            let splitDMS = val.match(/(.*?[NS])\s*[,;]*\s*(.*?[EOW])/i);
+            if (splitDMS) {
+                document.getElementById('latInput').value = splitDMS[1].trim();
+                document.getElementById('lonInput').value = splitDMS[2].trim();
+                return;
+            }
+            let splitDec = val.match(/^(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)$/);
+            if (splitDec) {
+                document.getElementById('latInput').value = splitDec[1].trim();
+                document.getElementById('lonInput').value = splitDec[2].trim();
+            }
+        }
+
+        // ==========================================
+        // MOTORE PRINCIPALE DI AGGIORNAMENTO
+        // ==========================================
+        async function updateDashboard() {
+            const latStr = document.getElementById('latInput').value;
+            const lonStr = document.getElementById('lonInput').value;
+            const lat = parseCoordinate(latStr);
+            const lon = parseCoordinate(lonStr);
+            const dateStr = document.getElementById('dateInput').value;
+
+            if (isNaN(lat) || isNaN(lon) || !dateStr) {
+                alert("Inserisci coordinate e data valide.");
+                return;
+            }
+
+            updateSunMoon(lat, lon, dateStr);
+            fetchOpenMeteo(lat, lon, dateStr);
+            updateCoordinateIframes(lat, lon); 
+
+            const coordKey = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+            const label = document.getElementById('detectedCityLabel');
+
+            if (coordKey === "37.87548,14.02748") { 
+                label.innerHTML = `Località montana rilevata: <strong>Piano Battaglia</strong>`;
+                label.className = "text-sm px-3 py-1 bg-blue-900 text-blue-200 rounded-full border border-blue-700 shadow-inner";
+                updateCityIframes(null, {
+                    url3b: "https://www.3bmeteo.com/meteo/piano+battaglia",
+                    urlIlMeteo: "https://www.ilmeteo.it/meteo/piano+battaglia",
+                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/isnello" 
+                });
+                return; 
+            } 
+            else if (coordKey === "37.79914,15.03950") { 
+                label.innerHTML = `Località montana rilevata: <strong>Piano Provenzana</strong>`;
+                label.className = "text-sm px-3 py-1 bg-blue-900 text-blue-200 rounded-full border border-blue-700 shadow-inner";
+                updateCityIframes(null, {
+                    url3b: "https://www.3bmeteo.com/meteo/piano+provenzana",
+                    urlIlMeteo: "https://www.ilmeteo.it/meteo/linguaglossa", 
+                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/linguaglossa" 
+                });
+                return; 
+            }
+
+            const cityName = await fetchNearestMunicipality(lat, lon);
+            if (cityName) {
+                updateCityIframes(cityName);
+            }
+        }
+
+        // ==========================================
+        // SOLE E LUNA (SunCalc)
+        // ==========================================
+        function updateSunMoon(lat, lon, dateStr) {
+            const targetDate = new Date(`${dateStr}T12:00:00`);
+
+            const testTimes = SunCalc.getTimes(targetDate, lat, lon);
+            if (!testTimes.blueHourMorning) {
+                SunCalc.addTime(-4, 'blueHourMorning', 'blueHourEvening');
+            }
+
+            const sunTimes = SunCalc.getTimes(targetDate, lat, lon);
+            const moonTimes = SunCalc.getMoonTimes(targetDate, lat, lon);
+            const moonIllum = SunCalc.getMoonIllumination(targetDate);
+
+            const formatTime = (date) => {
+                if (!date || isNaN(date)) return '--:--';
+                return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            };
+
+            let luceString = "--h --m";
+            if (sunTimes.sunrise && sunTimes.sunset) {
+                const diff = sunTimes.sunset - sunTimes.sunrise;
+                const ore = Math.floor(diff / 3600000);
+                const min = Math.floor((diff % 3600000) / 60000);
+                luceString = `${ore}h ${min}m`;
+            }
+
+            const getStandardAzimuth = (azRad) => {
+                let deg = (azRad * 180 / Math.PI) + 180;
+                return Math.round(deg) % 360;
+            };
+            const getCompassDir = (deg) => {
+                const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO', 'N'];
+                return dirs[Math.round(deg / 45)];
+            };
+
+            const phase = moonIllum.phase;
+            let lunaFaseTesto = "", lunaIcona = "🌕";
+            if (phase < 0.03 || phase > 0.97) { lunaFaseTesto = "Luna Nuova"; lunaIcona = "🌑"; }
+            else if (phase < 0.25) { lunaFaseTesto = "Falce crescente"; lunaIcona = "🌒"; }
+            else if (phase < 0.28) { lunaFaseTesto = "Primo Quarto"; lunaIcona = "🌓"; }
+            else if (phase < 0.50) { lunaFaseTesto = "Gibbosa crescente"; lunaIcona = "🌔"; }
+            else if (phase < 0.53) { lunaFaseTesto = "Luna Piena"; lunaIcona = "🌕"; }
+            else if (phase < 0.75) { lunaFaseTesto = "Gibbosa calante"; lunaIcona = "🌖"; }
+            else if (phase < 0.78) { lunaFaseTesto = "Ultimo Quarto"; lunaIcona = "🌗"; }
+            else { lunaFaseTesto = "Falce calante"; lunaIcona = "🌘"; }
+
+            const fraction = (moonIllum.fraction * 100).toFixed(0);
+            const posNow = SunCalc.getMoonPosition(targetDate, lat, lon);
+            const distLuna = Math.round(posNow.distance); 
+
+            let albaLunaStr = "--:--", tramontoLunaStr = "--:--";
+            let albaLunaDir = "", tramontoLunaDir = "";
+            let culmineStr = "--:--", culmineAlt = "--", culmineDir = "";
+
+            if (moonTimes.rise) {
+                albaLunaStr = formatTime(moonTimes.rise);
+                const posRise = SunCalc.getMoonPosition(moonTimes.rise, lat, lon);
+                const azDeg = getStandardAzimuth(posRise.azimuth);
+                albaLunaDir = `${azDeg}° ${getCompassDir(azDeg)}`;
+            }
+            if (moonTimes.set) {
+                tramontoLunaStr = formatTime(moonTimes.set);
+                const posSet = SunCalc.getMoonPosition(moonTimes.set, lat, lon);
+                const azDeg = getStandardAzimuth(posSet.azimuth);
+                tramontoLunaDir = `${azDeg}° ${getCompassDir(azDeg)}`;
+            }
+            if (moonTimes.rise && moonTimes.set) {
+                const tRise = moonTimes.rise.getTime();
+                let tSet = moonTimes.set.getTime();
+                if (tSet < tRise) tSet += 86400000; 
+                const transitTime = new Date(tRise + (tSet - tRise) / 2);
+                
+                culmineStr = formatTime(transitTime);
+                const posTransit = SunCalc.getMoonPosition(transitTime, lat, lon);
+                culmineAlt = Math.round(posTransit.altitude * 180 / Math.PI);
+                const azDeg = getStandardAzimuth(posTransit.azimuth);
+                culmineDir = `${azDeg}° ${getCompassDir(azDeg)}`;
+            }
+
+            document.getElementById('astroData').innerHTML = `
+                <div class="mb-6 pt-2">
+                    <h3 class="font-bold text-white mb-3 flex items-center gap-2"><span class="text-xl">☀️</span>Sole</h3>
+                    <div class="grid grid-cols-2 gap-4 text-[15px] text-slate-300">
+                        
+                        <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
+                            <h4 class="font-semibold text-amber-400 mb-2 border-b border-slate-600/50 pb-1 flex items-center gap-1">🌅 Alba</h4>
+                            <ul class="space-y-1.5">
+                                <li class="flex justify-between"><span>🔭 Astronomica</span> <span>${formatTime(sunTimes.nightEnd)}</span></li>
+                                <li class="flex justify-between"><span>⚓ Nautica</span> <span>${formatTime(sunTimes.nauticalDawn)}</span></li>
+                                <li class="flex justify-between"><span>🏙️ Civile</span> <span>${formatTime(sunTimes.dawn)}</span></li>
+                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hour</span> <span>${formatTime(sunTimes.blueHourMorning)}</span></li>
+                                <li class="flex justify-between text-amber-200 font-bold border-l-2 border-amber-400 pl-1 -ml-1"><span>☀️ Reale</span> <span>${formatTime(sunTimes.sunrise)}</span></li>
+                                <li class="flex justify-between text-orange-300"><span>📸 Golden Hour</span> <span>${formatTime(sunTimes.goldenHourEnd)}</span></li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
+                            <h4 class="font-semibold text-orange-400 mb-2 border-b border-slate-600/50 pb-1 flex items-center gap-1">🌇 Tramonto</h4>
+                            <ul class="space-y-1.5">
+                                <li class="flex justify-between text-orange-300"><span>📸 Golden Hour</span> <span>${formatTime(sunTimes.goldenHour)}</span></li>
+                                <li class="flex justify-between text-orange-200 font-bold border-l-2 border-orange-400 pl-1 -ml-1"><span>☀️ Reale</span> <span>${formatTime(sunTimes.sunset)}</span></li>
+                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hour</span> <span>${formatTime(sunTimes.blueHourEvening)}</span></li>
+                                <li class="flex justify-between"><span>🏙️ Civile</span> <span>${formatTime(sunTimes.dusk)}</span></li>
+                                <li class="flex justify-between"><span>⚓ Nautica</span> <span>${formatTime(sunTimes.nauticalDusk)}</span></li>
+                                <li class="flex justify-between"><span>🔭 Astronomica</span> <span>${formatTime(sunTimes.night)}</span></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 bg-slate-700/70 rounded-lg p-3 flex justify-between items-center text-[15px] text-slate-200 shadow-inner">
+                        <span>🔆 Zenith: <strong class="text-white">${formatTime(sunTimes.solarNoon)}</strong></span>
+                        <span>⏱️ Luce: <strong class="text-white">${luceString}</strong></span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-2 italic text-center">⚠️ Dati calcolati per il ${targetDate.toLocaleDateString('it-IT')}</p>
+                </div>
+
+                <div class="border-t border-slate-700 pt-5">
+                    <h3 class="font-bold text-white mb-3 flex items-center gap-2"><span class="text-xl">🌙</span> Luna</h3>
+                    <div class="text-[15px] text-slate-300 space-y-3">
+                        
+                        <div class="flex items-center space-x-3 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
+                            <span class="text-3xl">${lunaIcona}</span>
+                            <span class="font-semibold text-white">${lunaFaseTesto} <span class="font-normal text-slate-400">&middot; ${fraction}% illuminata</span></span>
+                        </div>
+                        <div class="flex items-center space-x-3 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
+                            <span class="text-2xl pl-1">📏</span>
+                            <span>Distanza stimata: <strong class="text-white">${distLuna.toLocaleString('it-IT')} km</strong></span>
+                        </div>
+                        
+                        <div class="grid grid-cols-3 gap-2 mt-4 bg-slate-700/70 p-4 rounded-lg text-center shadow-inner">
+                            <div>
+                                <div class="text-[12px] text-slate-400 font-medium">🌙 Alba luna</div>
+                                <div class="font-bold text-white text-[17px] my-0.5">${albaLunaStr}</div>
+                                <div class="text-[12px] text-slate-300">&rarr; ${albaLunaDir}</div>
+                            </div>
+                            <div class="border-x border-slate-500/50">
+                                <div class="text-[12px] text-slate-400 font-medium">📐 Culmine (${culmineAlt}°)</div>
+                                <div class="font-bold text-white text-[17px] my-0.5">${culmineStr}</div>
+                                <div class="text-[12px] text-slate-300">&rarr; ${culmineDir}</div>
+                            </div>
+                            <div>
+                                <div class="text-[12px] text-slate-400 font-medium">🌙 Tramonto</div>
+                                <div class="font-bold text-white text-[17px] my-0.5">${tramontoLunaStr}</div>
+                                <div class="text-[12px] text-slate-300">&rarr; ${tramontoLunaDir}</div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==========================================
+        // DATI OPEN METEO E TRADUZIONE WMO
+        // ==========================================
+        function getWmoDetails(code) {
+            const wmo = {
+                0: { text: "Sereno", icon: "☀️" },
+                1: { text: "Poco nuvoloso", icon: "🌤️" },
+                2: { text: "Parzialmente nuvoloso", icon: "⛅" },
+                3: { text: "Coperto", icon: "☁️" },
+                45: { text: "Nebbia", icon: "🌫️" },
+                48: { text: "Nebbia con brina", icon: "🌫️" },
+                51: { text: "Pioviggine leggera", icon: "🌧️" },
+                53: { text: "Pioviggine moderata", icon: "🌧️" },
+                55: { text: "Pioviggine densa", icon: "🌧️" },
+                61: { text: "Pioggia leggera", icon: "🌧️" },
+                63: { text: "Pioggia moderata", icon: "🌧️" },
+                65: { text: "Pioggia forte", icon: "🌧️" },
+                71: { text: "Neve leggera", icon: "🌨️" },
+                73: { text: "Neve moderata", icon: "🌨️" },
+                75: { text: "Neve forte", icon: "🌨️" },
+                95: { text: "Temporale", icon: "⛈️" },
+                96: { text: "Temporale con grandine", icon: "⛈️" },
+                99: { text: "Temporale forte", icon: "⛈️" }
+            };
+            return wmo[code] || { text: "Condizione sconosciuta", icon: "❓" };
+        }
+
+        async function fetchOpenMeteo(lat, lon, dateStr) {
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m&timezone=Europe%2FRome`;
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(`Errore Server: ${response.status} ${errData.reason ? '- ' + errData.reason : ''}`);
+                }
+                const data = await response.json();
+
+                const elevation = data.elevation; 
+                const daily = data.daily;
+                const codeWmo = daily.weather_code[0];
+                const minT = daily.temperature_2m_min[0];
+                const maxT = daily.temperature_2m_max[0];
+                const minApp = daily.apparent_temperature_min[0];
+                const maxApp = daily.apparent_temperature_max[0];
+                const windMax = daily.wind_speed_10m_max[0];
+                const windGusts = daily.wind_gusts_10m_max[0];
+                const windDirDeg = daily.wind_direction_10m_dominant[0];
+                const probRain = daily.precipitation_probability_max[0] ?? '--'; 
+                const uvIndex = daily.uv_index_max[0] ?? 0;
+
+                const avgHum = Math.round(data.hourly.relative_humidity_2m.reduce((a, b) => a + b, 0) / 24);
+                const avgPress = Math.round(data.hourly.surface_pressure.reduce((a, b) => a + b, 0) / 24);
+
+                const wmoInfo = getWmoDetails(codeWmo);
+                const getCompassDir = (deg) => ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO', 'N'][Math.round(deg / 45)];
+                const windDirStr = `${getCompassDir(windDirDeg)} (${windDirDeg}°)`;
+
+                const dateObj = new Date(dateStr);
+                const formattedDate = dateObj.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                let uvColor = "text-green-400";
+                let uvTesto = "Basso";
+                if (uvIndex >= 3 && uvIndex <= 5) { uvColor = "text-yellow-400"; uvTesto = "Moderato"; }
+                else if (uvIndex >= 6 && uvIndex <= 7) { uvColor = "text-orange-400"; uvTesto = "Alto"; }
+                else if (uvIndex >= 8 && uvIndex <= 10) { uvColor = "text-red-500"; uvTesto = "Molto Alto"; }
+                else if (uvIndex >= 11) { uvColor = "text-purple-500"; uvTesto = "Estremo"; }
+
+                let hourlyHtml = `<div class="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">`;
+                for (let i = 0; i < 24; i++) {
+                    const timeHour = data.hourly.time[i].substring(11, 16); 
+                    const tempH = Math.round(data.hourly.temperature_2m[i]);
+                    hourlyHtml += `
+                        <div class="flex flex-col items-center min-w-[50px] bg-slate-700/40 p-2 rounded-lg border border-slate-600/30">
+                            <span class="text-xs text-slate-400">${timeHour}</span>
+                            <span class="font-bold text-white mt-1">${tempH}°</span>
+                        </div>
+                    `;
+                }
+                hourlyHtml += `</div>`;
+
+                document.getElementById('openMeteoData').innerHTML = `
+                    <div class="mb-4 text-sm text-slate-400 border-b border-slate-600 pb-4 text-center">
+                        📍 Calcolato per <strong class="text-white">${formattedDate}</strong> &middot; (${lat.toFixed(5)}, ${lon.toFixed(5)})<br>
+                        ⛰️ Altitudine: <strong class="text-white">${elevation} m s.l.m.</strong>
+                        
+                        <div class="mt-4 flex justify-center items-center space-x-3">
+                            <span class="text-4xl drop-shadow-md">${wmoInfo.icon}</span> 
+                            <span class="text-2xl text-white font-bold tracking-wide">${wmoInfo.text}</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-slate-700/40 p-4 rounded-lg border border-slate-600/50 flex flex-col justify-center">
+                            <div class="flex justify-center items-center space-x-3 text-2xl font-extrabold tracking-tight">
+                                <span class="text-blue-300 drop-shadow">❄️ ${minT}°</span>
+                                <span class="text-slate-500 font-light">&middot;</span>
+                                <span class="text-red-400 drop-shadow">🔥 ${maxT}°</span>
+                            </div>
+                            <div class="text-center text-sm text-slate-300 mt-3 pt-2 border-t border-slate-600/50">
+                                Percepita: <span class="font-semibold text-blue-200">❄️ ${minApp}°</span> | <span class="font-semibold text-red-300">🔥 ${maxApp}°</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50 text-center flex flex-col justify-center">
+                            <div class="grid grid-cols-2 gap-2 mb-2 border-b border-slate-600/50 pb-2">
+                                <div class="text-sm"><span class="text-slate-400 text-[10px] uppercase tracking-wider">Vento max</span><br><strong class="text-white text-base">${windMax} km/h</strong></div>
+                                <div class="text-sm"><span class="text-slate-400 text-[10px] uppercase tracking-wider">Raffiche</span><br><strong class="text-white text-base">${windGusts} km/h</strong></div>
+                            </div>
+                            <div class="flex justify-around items-center">
+                                <div class="text-sm"><span class="text-slate-400 text-[10px] uppercase tracking-wider">Direz.</span><br><strong class="text-white">${windDirStr}</strong></div>
+                                <div class="text-sm border-l border-slate-600/50 pl-2">
+                                    <span class="text-slate-400 text-[10px] uppercase tracking-wider">UV Index</span><br>
+                                    <strong class="${uvColor}">${uvIndex} <span class="text-xs">(${uvTesto})</span></strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 bg-slate-700/20 p-3 rounded-lg border border-slate-600/50">
+                        <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">⏱️ Temperature Orarie</h4>
+                        ${hourlyHtml}
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 mt-4 text-center">
+                        <div class="bg-slate-700/40 p-2 rounded-lg border border-slate-600/50">
+                            <div class="text-xl mb-1">💧</div>
+                            <div class="text-[11px] text-slate-300 uppercase tracking-wider">Umidità</div>
+                            <div class="font-bold text-white mt-1 text-base">${avgHum}%</div>
+                        </div>
+                        <div class="bg-slate-700/40 p-2 rounded-lg border border-slate-600/50">
+                            <div class="text-xl mb-1">📊</div>
+                            <div class="text-[11px] text-slate-300 uppercase tracking-wider">Pressione</div>
+                            <div class="font-bold text-white mt-1 text-base">${avgPress} hPa</div>
+                        </div>
+                        <div class="bg-slate-700/40 p-2 rounded-lg border border-slate-600/50">
+                            <div class="text-xl mb-1">🌂</div>
+                            <div class="text-[11px] text-slate-300 uppercase tracking-wider">Prob. pioggia</div>
+                            <div class="font-bold text-white mt-1 text-base">${probRain}%</div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error("Dettaglio Errore Open-Meteo:", error);
+                let messaggioErrore = error.message;
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    messaggioErrore = "Connessione bloccata dal browser o AdBlocker.";
+                }
+                document.getElementById('openMeteoData').innerHTML = `<p class="text-red-400 font-semibold">${messaggioErrore}</p>`;
+            }
+        }
+
+        async function fetchNearestMunicipality(lat, lon) {
+            const label = document.getElementById('detectedCityLabel');
+
+            label.innerHTML = `Ricerca Comune in corso (Nominatim)...`;
+            label.className = "text-sm px-3 py-1 bg-slate-700 text-slate-300 rounded-full border border-slate-600 shadow-inner";
+
+            try {
+                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10`;
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept-Language': 'it'
+                    }
+                });
+                
+                if (!response.ok) throw new Error("Errore HTTP");
+                
+                const data = await response.json();
+
+                if (data && data.address) {
+                    const cityName = data.address.city || data.address.town || data.address.village || data.address.municipality || data.name;
+                    const regionName = data.address.state || "Italia";
+                    
+                    if (cityName) {
+                        label.innerHTML = `Comune rilevato: <strong>${cityName}</strong> (${regionName})`;
+                        label.className = "text-sm px-3 py-1 bg-emerald-900 text-emerald-200 rounded-full border border-emerald-700 shadow-inner";
+                        return cityName;
+                    }
+                }
+                
+                if (data && data.address && data.address.country) {
+                     label.innerHTML = `Nessun comune esatto (Area: ${data.address.country})`;
+                     label.className = "text-sm px-3 py-1 bg-yellow-900 text-yellow-200 rounded-full border border-yellow-700 shadow-inner";
+                     return null;
+                }
+
+                label.innerHTML = `Coordinate fuori copertura terrestre.`;
+                label.className = "text-sm px-3 py-1 bg-yellow-900 text-yellow-200 rounded-full border border-yellow-700 shadow-inner";
+                return null;
+                
+            } catch (error) {
+                console.error("Errore Nominatim:", error);
+                label.innerHTML = `Errore di Rete: Connessione a OpenStreetMap fallita.`;
+                label.className = "text-sm px-3 py-1 bg-red-900 text-red-200 rounded-full border border-red-700 shadow-inner";
+                return null;
+            }
+        }
+
+        function updateCoordinateIframes(lat, lon) {
+            // Windy
+            const windyUrl = `https://www.windy.com/?${lat},${lon},10`;
+            document.getElementById('windyIframe').src = `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=°C&metricWind=km/h&zoom=10&overlay=wind&product=ecmwf&level=surface&lat=${lat}&lon=${lon}`;
+            document.getElementById('linkWindy').href = windyUrl;
+            document.getElementById('linkWindy').innerText = windyUrl;
+            
+            const latDir = lat >= 0 ? 'N' : 'S';
+            const lonDir = lon >= 0 ? 'E' : 'W';
+            const latAbs = Math.abs(lat).toFixed(3);
+            const lonAbs = Math.abs(lon).toFixed(3);
+            const meteoblueSlug = `${latAbs}${latDir}${lonAbs}${lonDir}`;
+            
+            const mbDirectLink = `https://www.meteoblue.com/it/tempo/settimana/${meteoblueSlug}`;
+            const mbMapLink = `https://www.meteoblue.com/it/tempo/mappe/${meteoblueSlug}`;
+            
+            document.getElementById('linkMeteogram').href = mbDirectLink;
+            document.getElementById('linkMeteogram').innerText = mbDirectLink;
+            
+            document.getElementById('linkSeeing').href = mbDirectLink;
+            document.getElementById('linkSeeing').innerText = mbDirectLink;
+            
+            document.getElementById('linkMap').href = mbMapLink;
+            document.getElementById('linkMap').innerText = mbMapLink;
+
+            // METEOBLUE IFRAMES
+            
+            // 1. Meteogramma (Dinamico per coordinate, endpoint pubblico senza firme, layout bright)
+            document.getElementById('meteoblueMeteogramIframe').src = `https://www.meteoblue.com/it/tempo/widget/three?geoloc=fixed&lat=${lat}&lon=${lon}&tz=Europe%2FRome&days=4&tempresolution=1&windresolution=1&waterresolution=1&format=h&winddirection=0&layout=bright&autowidth=auto`;
+            // 2. Seeing
+            document.getElementById('meteoblueSeeingIframe').src = `https://www.meteoblue.com/it/tempo/widget/seeing/${meteoblueSlug}?geoloc=fixed`;
+            
+            // 3. Mappa
+            document.getElementById('meteoblueMapIframe').src = `https://www.meteoblue.com/it/tempo/mappe/widget/${meteoblueSlug}?windAnimation=1&gust=1&satellite=1&cloudsAndPrecipitation=1&temperature=1&sunshine=1&extremeForecastIndex=1&geoloc=fixed&tempunit=C&lengthunit=metric&windunit=km%252Fh&zoom=8&autowidth=auto`;
+        }
+
+        function updateCityIframes(cityName, overrideUrls = null) {
+            let url3b, urlIlMeteo, urlMeteoAm;
+
+            if (overrideUrls) {
+                url3b = overrideUrls.url3b;
+                urlIlMeteo = overrideUrls.urlIlMeteo;
+                urlMeteoAm = overrideUrls.urlMeteoAm;
+            } else {
+                const slugHyphen = cityName.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
+                const slugPlus = cityName.toLowerCase().replace(/ /g, '+').replace(/[^a-z0-9+]/g, '');
+
+                url3b = `https://www.3bmeteo.com/meteo/${slugPlus}`;
+                urlIlMeteo = `https://www.ilmeteo.it/meteo/${slugPlus}`;
+                urlMeteoAm = `https://www.meteoam.it/it/meteo-citta/${slugHyphen}`;
+            }
+
+            document.getElementById('treBMeteoIframe').src = url3b;
+            document.getElementById('ilMeteoIframe').src = urlIlMeteo;
+            document.getElementById('meteoAmIframe').src = urlMeteoAm;
+
+            document.getElementById('link3b').href = url3b;
+            document.getElementById('link3b').innerText = url3b;
+
+            document.getElementById('linkIlMeteo').href = urlIlMeteo;
+            document.getElementById('linkIlMeteo').innerText = urlIlMeteo;
+
+            document.getElementById('linkMeteoAm').href = urlMeteoAm;
+            document.getElementById('linkMeteoAm').innerText = urlMeteoAm;
+        }
+    </script>
+</body>
+</html>
