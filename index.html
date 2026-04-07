@@ -521,30 +521,43 @@
 
         async function fetchOpenMeteo(lat, lon, dateStr) {
             try {
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m&timezone=Europe%2FRome`;
+                // TRUCCO CDN: Invece di chiedere una data precisa, scarichiamo i 16 giorni standard
+                // Questo bypassa i blocchi 429 di Open-Meteo sulle reti mobili
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m&timezone=Europe%2FRome&forecast_days=16`;
                 
                 const response = await fetch(url);
-                if (!response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    throw new Error(`Errore Server: ${response.status} ${errData.reason ? '- ' + errData.reason : ''}`);
-                }
+                if (!response.ok) throw new Error("Impossibile connettersi a Open-Meteo");
+                
                 const data = await response.json();
 
-                const elevation = data.elevation; 
-                const daily = data.daily;
-                const codeWmo = daily.weather_code[0];
-                const minT = daily.temperature_2m_min[0];
-                const maxT = daily.temperature_2m_max[0];
-                const minApp = daily.apparent_temperature_min[0];
-                const maxApp = daily.apparent_temperature_max[0];
-                const windMax = daily.wind_speed_10m_max[0];
-                const windGusts = daily.wind_gusts_10m_max[0];
-                const windDirDeg = daily.wind_direction_10m_dominant[0];
-                const probRain = daily.precipitation_probability_max[0] ?? '--'; 
-                const uvIndex = daily.uv_index_max[0] ?? 0;
+                // Cerchiamo l'indice (la posizione) della data selezionata dall'utente
+                const dIdx = data.daily.time.indexOf(dateStr);
+                if (dIdx === -1) {
+                    throw new Error("Data fuori copertura (max 16 giorni).");
+                }
 
-                const avgHum = Math.round(data.hourly.relative_humidity_2m.reduce((a, b) => a + b, 0) / 24);
-                const avgPress = Math.round(data.hourly.surface_pressure.reduce((a, b) => a + b, 0) / 24);
+                const elevation = data.elevation; 
+                // Estraiamo i dati puntando solo all'indice [dIdx] corretto
+                const codeWmo = data.daily.weather_code[dIdx];
+                const minT = data.daily.temperature_2m_min[dIdx];
+                const maxT = data.daily.temperature_2m_max[dIdx];
+                const minApp = data.daily.apparent_temperature_min[dIdx];
+                const maxApp = data.daily.apparent_temperature_max[dIdx];
+                const windMax = data.daily.wind_speed_10m_max[dIdx];
+                const windGusts = data.daily.wind_gusts_10m_max[dIdx];
+                const windDirDeg = data.daily.wind_direction_10m_dominant[dIdx];
+                const probRain = data.daily.precipitation_probability_max[dIdx] ?? '--'; 
+                const uvIndex = data.daily.uv_index_max[dIdx] ?? 0;
+
+                // Calcolo medie umidità e pressione prendendo solo le 24 ore di quella giornata
+                const hStart = data.hourly.time.findIndex(t => t.startsWith(dateStr));
+                let avgHum = '--', avgPress = '--';
+                if (hStart !== -1) {
+                    const dayHum = data.hourly.relative_humidity_2m.slice(hStart, hStart + 24);
+                    const dayPress = data.hourly.surface_pressure.slice(hStart, hStart + 24);
+                    avgHum = Math.round(dayHum.reduce((a, b) => a + b, 0) / 24);
+                    avgPress = Math.round(dayPress.reduce((a, b) => a + b, 0) / 24);
+                }
 
                 const wmoInfo = getWmoDetails(codeWmo);
                 const getCompassDir = (deg) => ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO', 'N'][Math.round(deg / 45)];
@@ -561,15 +574,17 @@
                 else if (uvIndex >= 11) { uvColor = "text-purple-500"; uvTesto = "Estremo"; }
 
                 let hourlyHtml = `<div class="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">`;
-                for (let i = 0; i < 24; i++) {
-                    const timeHour = data.hourly.time[i].substring(11, 16); 
-                    const tempH = Math.round(data.hourly.temperature_2m[i]);
-                    hourlyHtml += `
-                        <div class="flex flex-col items-center min-w-[50px] bg-slate-700/40 p-2 rounded-lg border border-slate-600/30">
-                            <span class="text-xs text-slate-400">${timeHour}</span>
-                            <span class="font-bold text-white mt-1">${tempH}°</span>
-                        </div>
-                    `;
+                if (hStart !== -1) {
+                    for (let i = 0; i < 24; i++) {
+                        const timeHour = data.hourly.time[hStart + i].substring(11, 16); 
+                        const tempH = Math.round(data.hourly.temperature_2m[hStart + i]);
+                        hourlyHtml += `
+                            <div class="flex flex-col items-center min-w-[50px] bg-slate-700/40 p-2 rounded-lg border border-slate-600/30">
+                                <span class="text-xs text-slate-400">${timeHour}</span>
+                                <span class="font-bold text-white mt-1">${tempH}°</span>
+                            </div>
+                        `;
+                    }
                 }
                 hourlyHtml += `</div>`;
 
@@ -635,12 +650,8 @@
                     </div>
                 `;
             } catch (error) {
-                console.error("Dettaglio Errore Open-Meteo:", error);
-                let messaggioErrore = error.message;
-                if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                    messaggioErrore = "Connessione bloccata dal browser o AdBlocker.";
-                }
-                document.getElementById('openMeteoData').innerHTML = `<p class="text-red-400 font-semibold">${messaggioErrore}</p>`;
+                console.error("Dettaglio Errore:", error);
+                document.getElementById('openMeteoData').innerHTML = `<p class="text-red-400 font-semibold text-center mt-4">⚠️ ${error.message}</p>`;
             }
         }
 
