@@ -40,49 +40,58 @@
         <div class="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
             <h1 class="text-2xl font-bold mb-4 text-white">Pannello di Controllo Meteo</h1>
             
-            <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                <div>
-                    <label class="block text-sm font-medium text-slate-300">Data</label>
-                    <input type="date" id="dateInput" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-300">Località Predefinite</label>
-                    <select id="presetSelect" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" onchange="loadPreset()">
-                        <option value="38.1157,13.3615">Palermo</option>
-                        <option value="37.882734, 13.377292">Ficuzza (Paese)</option>
-                        <option value="37.855219, 13.395388">Rocca Busambra</option>
-                        <option value="37.978765, 13.290819">Piana degli Albanesi</option>
-                        <option value="37.993958, 13.263495">Monte Pizzuta</option>
-                        <option value="37.950206, 13.609353">Eremo di San Felice</option> 
-                        <option value="37.875479, 14.027481">Piano Battaglia</option>
-                        <option value="37.894083, 14.025414">Pizzo Carbonara</option>
-                        <option value="37.895988, 14.066772">Piano Pomo</option>
-                        <option value="37.799139, 15.039498">Piano Provenzana</option>
-                        <option value="37.762688, 15.021520">Pizzo Deneri</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-300">Latitudine</label>
-                    <input type="text" id="latInput" oninput="handleCoordPaste(event)" placeholder="Es. 38.1157 o 38°06'56&quot;N" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-300">Longitudine</label>
-                    <input type="text" id="lonInput" placeholder="Es. 13.3615 o 13°21'41&quot;E" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                </div>
-                
-                <div>
-                    <button onclick="openMapModal()" class="w-full bg-slate-600 text-white font-semibold p-2 rounded hover:bg-slate-500 transition shadow border border-slate-500 flex items-center justify-center gap-2">
-                        🗺️ Mappa
-                    </button>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300">Data</label>
+                        <input type="date" id="dateInput" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300">Località Predefinite</label>
+                        <select id="presetSelect" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" onchange="loadPreset()">
+                            <option value="38.1157,13.3615">Palermo</option>
+                            <option value="37.882734, 13.377292">Ficuzza (Paese)</option>
+                            <option value="37.855219, 13.395388">Rocca Busambra</option>
+                            <option value="37.978765, 13.290819">Piana degli Albanesi</option>
+                            <option value="37.993958, 13.263495">Monte Pizzuta</option>
+                            <option value="37.950206, 13.609353">Eremo di San Felice</option> 
+                            <option value="37.875479, 14.027481">Piano Battaglia</option>
+                            <option value="37.894083, 14.025414">Pizzo Carbonara</option>
+                            <option value="37.895988, 14.066772">Piano Pomo</option>
+                            <option value="37.799139, 15.039498">Piano Provenzana</option>
+                            <option value="37.762688, 15.021520">Pizzo Deneri</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300">Ricerca Libera (Nome)</label>
+                        <div class="flex mt-1 shadow-sm">
+                            <input type="text" id="searchInput" placeholder="Es. Etna, o Via Roma" class="w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-l focus:ring-2 focus:ring-blue-500 focus:outline-none" onkeypress="if(event.key === 'Enter') geocodeLocation()">
+                            <button onclick="geocodeLocation()" class="bg-blue-600 text-white px-4 rounded-r hover:bg-blue-500 transition border border-blue-600" title="Cerca e Aggiorna">🔍</button>
+                        </div>
+                    </div>
                 </div>
 
-                <div>
-                    <button onclick="updateDashboard()" class="w-full bg-blue-600 text-white font-semibold p-2 rounded hover:bg-blue-500 transition shadow-lg">
-                        Aggiorna
-                    </button>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300">Latitudine</label>
+                        <input type="text" id="latInput" oninput="handleCoordPaste(event)" placeholder="Es. 38.1157" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300">Longitudine</label>
+                        <input type="text" id="lonInput" placeholder="Es. 13.3615" class="mt-1 w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <button onclick="openMapModal()" class="w-full bg-slate-600 text-white font-semibold p-2 rounded hover:bg-slate-500 transition shadow border border-slate-500 flex items-center justify-center gap-2">
+                            🗺️ Mappa
+                        </button>
+                    </div>
+                    <div>
+                        <button onclick="updateDashboard()" class="w-full bg-blue-600 text-white font-semibold p-2 rounded hover:bg-blue-500 transition shadow-lg">
+                            Aggiorna
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
 
         <div>
             <div class="flex flex-col md:flex-row md:items-end justify-between mb-4 border-b border-slate-700 pb-2">
@@ -291,6 +300,60 @@
             if (splitDec) {
                 document.getElementById('latInput').value = splitDec[1].trim();
                 document.getElementById('lonInput').value = splitDec[2].trim();
+            }
+        }
+
+        // ==========================================
+        // RICERCA LOCALITÀ (Forward Geocoding)
+        // ==========================================
+        async function geocodeLocation() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) {
+                alert("Inserisci il nome di una località da cercare.");
+                return;
+            }
+
+            const label = document.getElementById('detectedCityLabel');
+            label.innerHTML = `Ricerca coordinate in corso...`;
+            label.className = "text-sm px-3 py-1 bg-slate-700 text-slate-300 rounded-full border border-slate-600 shadow-inner";
+
+            try {
+                // Interroga Nominatim per convertire il nome in coordinate
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+                const response = await fetch(url, { headers: { 'Accept-Language': 'it' } });
+                
+                if (!response.ok) throw new Error("Errore HTTP");
+                
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    const lat = parseFloat(data[0].lat).toFixed(5);
+                    const lon = parseFloat(data[0].lon).toFixed(5);
+                    
+                    // Scrive le coordinate trovate nei rispettivi campi
+                    document.getElementById('latInput').value = lat;
+                    document.getElementById('lonInput').value = lon;
+                    
+                    // Svuota la tendina dei preset per non creare confusione
+                    document.getElementById('presetSelect').value = "";
+                    
+                    // Riposiziona il marker se la mappa era stata già aperta
+                    if (mapMarker) {
+                        mapMarker.setLatLng([lat, lon]);
+                        if (map) map.setView([lat, lon], 10);
+                    }
+
+                    // Avvia a cascata l'aggiornamento dell'intera dashboard (che farà il reverse geocoding)
+                    updateDashboard();
+                } else {
+                    label.innerHTML = `Nessun risultato trovato per "${query}".`;
+                    label.className = "text-sm px-3 py-1 bg-red-900 text-red-200 rounded-full border border-red-700 shadow-inner";
+                    alert("Località non trovata. Prova a inserire un nome più specifico.");
+                }
+            } catch (error) {
+                console.error("Errore Geocoding:", error);
+                label.innerHTML = `Errore di connessione durante la ricerca.`;
+                label.className = "text-sm px-3 py-1 bg-red-900 text-red-200 rounded-full border border-red-700 shadow-inner";
             }
         }
 
