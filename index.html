@@ -86,7 +86,7 @@
 
         <div>
             <div class="flex flex-col md:flex-row md:items-end justify-between mb-4 border-b border-slate-700 pb-2">
-                <h2 class="text-xl font-bold text-white">Siti Commerciali</h2>
+                <h2 class="text-xl font-bold text-white">Siti Commerciali (rilevamento automatico comuni limitrofi)</h2>
                 <div class="mt-2 md:mt-0">
                     <span id="detectedCityLabel" class="text-sm px-3 py-1 bg-slate-700 text-slate-300 rounded-full border border-slate-600 shadow-inner">
                         Inizializzazione in corso...
@@ -97,12 +97,12 @@
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
-                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">3bMeteo</h3>
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">3BMeteo</h3>
                     <a id="link3b" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
                     <iframe id="treBMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
                 </div>
                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
-                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">IlMeteo.it</h3>
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">IlMeteo</h3>
                     <a id="linkIlMeteo" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
                     <iframe id="ilMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
                 </div>
@@ -117,6 +117,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
             <div class="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
                 <h2 class="text-lg font-bold border-b border-slate-600 pb-2 mb-3 text-white">Bollettino Open-Meteo</h2>
+                <p class="text-xs text-slate-400 mb-4">Calcolato per le coordinate fornite.</p>
                 <div id="openMeteoData" class="text-sm space-y-2 text-slate-300">
                     <p class="text-slate-500 italic">In attesa di dati...</p>
                 </div>
@@ -124,6 +125,7 @@
 
             <div class="bg-slate-800 p-6 rounded-lg shadow-lg border border-slate-700">
                 <h2 class="text-lg font-bold border-b border-slate-600 pb-2 mb-3 text-white">Sole e Luna</h2>
+                <p class="text-xs text-slate-400 mb-4">Calcolato per le coordinate fornite.</p>
                 <div id="astroData" class="text-sm space-y-2 text-slate-300">
                     <p class="text-slate-500 italic">In attesa di dati...</p>
                 </div>
@@ -132,6 +134,7 @@
 
         <div class="mt-8 border-t border-slate-700 pt-6">
             <h2 class="text-xl font-bold text-white mb-4">Suite Avanzata Meteoblue</h2>
+            <p class="text-xs text-slate-400 mb-4">Calcolato per le coordinate fornite.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[750px] flex flex-col">
@@ -141,13 +144,13 @@
                 </div>
 
                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[750px] flex flex-col">
-                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Seeing (Astronomia)</h3>
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Astronomia</h3>
                     <a id="linkSeeing" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
                     <iframe id="meteoblueSeeingIframe" width="100%" height="100%" frameborder="0" scrolling="NO" allowtransparency="true" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" style="border: 0;overflow: hidden;" class="rounded flex-grow bg-white"></iframe>
                 </div>
 
                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[750px] flex flex-col col-span-1 md:col-span-2">
-                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Mappa Interattiva</h3>
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Mappa</h3>
                     <a id="linkMap" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
                     <iframe id="meteoblueMapIframe" width="100%" height="100%" frameborder="0" scrolling="NO" allowtransparency="true" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" style="border: 0;overflow: hidden;" class="rounded flex-grow"></iframe>
                 </div>
@@ -160,13 +163,13 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[800px] flex flex-col col-span-1 md:col-span-2">
-                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Windy (Radar/Satellite)</h3>
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Windy</h3>
                     <a id="linkWindy" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
                     <iframe id="windyIframe" width="100%" height="100%" frameborder="0" src="" class="rounded flex-grow"></iframe>
                 </div>
                 
                  <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[650px] overflow-hidden col-span-1 md:col-span-2 flex flex-col items-center">
-                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Sat24 (Italia Satellite Loop)</h3>
+                    <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Satellite Italia</h3>
                     <a href="https://it.sat24.com/it/it" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">https://it.sat24.com/it/it</a>
                     <iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" src="https://widgets.meteox.com/it-IT/widgets/radar/country/it/satellite" style="width:100%!important;max-width:600px!important;max-height:600px!important;height:100%!important;padding:0px;border:none!important;box-sizing:border-box!important;" scrolling="no" frameborder="0"></iframe>
                 </div>
