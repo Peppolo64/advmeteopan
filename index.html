@@ -521,35 +521,40 @@
 
         async function fetchOpenMeteo(lat, lon, dateStr) {
             try {
-                // TRUCCO CDN: Invece di chiedere una data precisa, scarichiamo i 16 giorni standard
-                // Questo bypassa i blocchi 429 di Open-Meteo sulle reti mobili
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m&timezone=Europe%2FRome&forecast_days=16`;
+                // TRUCCO CDN + SINTASSI CORRETTA: Chiediamo 16 giorni standard + 1 passato.
+                // Usiamo l'esatta nomenclatura (weathercode, windspeed) accettata dal server
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,windspeed_10m_max,windgusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m&timezone=Europe%2FRome&forecast_days=16&past_days=1`;
                 
                 const response = await fetch(url);
-                if (!response.ok) throw new Error("Impossibile connettersi a Open-Meteo");
+                
+                // Ora il codice non si limita a fallire, ma ci dice il motivo esatto se Open-Meteo si arrabbia
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(`Errore Server API: ${response.status} - ${errData.reason || 'Parametro non valido'}`);
+                }
                 
                 const data = await response.json();
 
-                // Cerchiamo l'indice (la posizione) della data selezionata dall'utente
+                // Cerchiamo la data selezionata nel pacchetto scaricato
                 const dIdx = data.daily.time.indexOf(dateStr);
                 if (dIdx === -1) {
-                    throw new Error("Data fuori copertura (max 16 giorni).");
+                    throw new Error("La data selezionata è fuori dalla copertura (max 16 giorni).");
                 }
 
                 const elevation = data.elevation; 
-                // Estraiamo i dati puntando solo all'indice [dIdx] corretto
-                const codeWmo = data.daily.weather_code[dIdx];
+                // Estraiamo i dati con la sintassi corretta!
+                const codeWmo = data.daily.weathercode[dIdx];
                 const minT = data.daily.temperature_2m_min[dIdx];
                 const maxT = data.daily.temperature_2m_max[dIdx];
                 const minApp = data.daily.apparent_temperature_min[dIdx];
                 const maxApp = data.daily.apparent_temperature_max[dIdx];
-                const windMax = data.daily.wind_speed_10m_max[dIdx];
-                const windGusts = data.daily.wind_gusts_10m_max[dIdx];
+                const windMax = data.daily.windspeed_10m_max[dIdx];
+                const windGusts = data.daily.windgusts_10m_max[dIdx];
                 const windDirDeg = data.daily.wind_direction_10m_dominant[dIdx];
                 const probRain = data.daily.precipitation_probability_max[dIdx] ?? '--'; 
                 const uvIndex = data.daily.uv_index_max[dIdx] ?? 0;
 
-                // Calcolo medie umidità e pressione prendendo solo le 24 ore di quella giornata
+                // Estrazione oraria intelligente focalizzata solo sul giorno scelto
                 const hStart = data.hourly.time.findIndex(t => t.startsWith(dateStr));
                 let avgHum = '--', avgPress = '--';
                 if (hStart !== -1) {
@@ -650,11 +655,11 @@
                     </div>
                 `;
             } catch (error) {
-                console.error("Dettaglio Errore:", error);
-                document.getElementById('openMeteoData').innerHTML = `<p class="text-red-400 font-semibold text-center mt-4">⚠️ ${error.message}</p>`;
+                console.error("Dettaglio Errore API:", error);
+                document.getElementById('openMeteoData').innerHTML = `<p class="text-red-400 font-semibold text-center mt-4">⚠️ Connessione a Open-Meteo fallita.<br><span class="text-xs text-slate-400 font-normal">${error.message}</span></p>`;
             }
         }
-
+        
         async function fetchNearestMunicipality(lat, lon) {
             const label = document.getElementById('detectedCityLabel');
 
