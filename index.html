@@ -661,26 +661,36 @@
                 48: { text: "Nebbia con brina", icon: "🌫️" },
                 51: { text: "Pioviggine leggera", icon: "🌧️" },
                 53: { text: "Pioviggine moderata", icon: "🌧️" },
-                55: { text: "Pioviggine densa", icon: "🌧️" },
+                55: { text: "Pioviggine forte", icon: "🌧️" },
+                56: { text: "Pioviggine gelata", icon: "🌧️" },
+                57: { text: "Pioviggine gelata", icon: "🌧️" },
                 61: { text: "Pioggia leggera", icon: "🌧️" },
                 63: { text: "Pioggia moderata", icon: "🌧️" },
                 65: { text: "Pioggia forte", icon: "🌧️" },
+                66: { text: "Pioggia gelata", icon: "🌧️" },
+                67: { text: "Pioggia gelata", icon: "🌧️" },
                 71: { text: "Neve leggera", icon: "🌨️" },
                 73: { text: "Neve moderata", icon: "🌨️" },
                 75: { text: "Neve forte", icon: "🌨️" },
+                77: { text: "Granelli di neve", icon: "🌨️" },
+                80: { text: "Rovesci leggeri", icon: "🌦️" },
+                81: { text: "Rovesci moderata", icon: "🌧️" },
+                82: { text: "Rovesci forti", icon: "⛈️" },
+                85: { text: "Rovesci di neve", icon: "🌨️" },
+                86: { text: "Rovesci di neve", icon: "❄️" },
                 95: { text: "Temporale", icon: "⛈️" },
-                96: { text: "Temporale con grandine", icon: "⛈️" },
+                96: { text: "Temporale grandine", icon: "⛈️" },
                 99: { text: "Temporale forte", icon: "⛈️" }
             };
-            return wmo[code] || { text: "Condizione sconosciuta", icon: "❓" };
+            return wmo[code] || { text: "Sconosciuto", icon: "❓" };
         }
 
         async function fetchOpenMeteo(lat, lon, dateStr) {
             try {
                 // TRUCCO CDN + SINTASSI CORRETTA: Chiediamo 16 giorni standard + 1 passato.
                 // Usiamo l'esatta nomenclatura (weathercode, windspeed) accettata dal server
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,windspeed_10m_max,windgusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m&timezone=Europe%2FRome&forecast_days=16&past_days=1`;
-                
+                // URL AGGIORNATO: Chiede anche apparent_temperature, weathercode, precipitation, windspeed_10m e winddirection_10m per ogni ora
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,windspeed_10m_max,windgusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m,apparent_temperature,weathercode,precipitation,windspeed_10m,winddirection_10m&timezone=Europe%2FRome&forecast_days=16&past_days=1`;                
                 const response = await fetch(url);
                 
                 // Ora il codice non si limita a fallire, ma ci dice il motivo esatto se Open-Meteo si arrabbia
@@ -734,15 +744,39 @@
                 else if (uvIndex >= 8 && uvIndex <= 10) { uvColor = "text-red-500"; uvTesto = "Molto Alto"; }
                 else if (uvIndex >= 11) { uvColor = "text-purple-500"; uvTesto = "Estremo"; }
 
-                let hourlyHtml = `<div class="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">`;
+                let hourlyHtml = `<div class="flex space-x-3 overflow-x-auto pb-4 scrollbar-hide">`;
                 if (hStart !== -1) {
                     for (let i = 0; i < 24; i++) {
-                        const timeHour = data.hourly.time[hStart + i].substring(11, 16); 
-                        const tempH = Math.round(data.hourly.temperature_2m[hStart + i]);
+                        const hIdx = hStart + i; // Indice esatto nell'array orario
+                        const timeHour = data.hourly.time[hIdx].substring(11, 16); 
+                        const tempH = Math.round(data.hourly.temperature_2m[hIdx]);
+                        const appTempH = Math.round(data.hourly.apparent_temperature[hIdx]);
+                        const codeH = data.hourly.weathercode[hIdx];
+                        const precipH = data.hourly.precipitation[hIdx];
+                        const windSpdH = Math.round(data.hourly.windspeed_10m[hIdx]);
+                        const windDirH = data.hourly.winddirection_10m[hIdx];
+                        const humH = data.hourly.relative_humidity_2m[hIdx];
+                        
+                        // Traducono i codici in testo/icone usando le funzioni già esistenti
+                        const wmoH = getWmoDetails(codeH);
+                        const dirH = getCompassDir(windDirH);
+
                         hourlyHtml += `
-                            <div class="flex flex-col items-center min-w-[50px] bg-slate-700/40 p-2 rounded-lg border border-slate-600/30">
-                                <span class="text-xs text-slate-400">${timeHour}</span>
-                                <span class="font-bold text-white mt-1">${tempH}°</span>
+                            <div class="flex flex-col items-center min-w-[90px] bg-slate-700/40 p-3 rounded-lg border border-slate-600/30 flex-shrink-0">
+                                <span class="text-sm font-bold text-slate-300 border-b border-slate-600 pb-1 mb-2 w-full text-center">${timeHour}</span>
+                                <span class="text-2xl drop-shadow" title="${wmoH.text}">${wmoH.icon}</span>
+                                <span class="text-[10px] text-slate-400 mt-1 truncate w-full text-center" title="${wmoH.text}">${wmoH.text}</span>
+                                
+                                <div class="mt-2 text-center">
+                                    <span class="font-bold text-white text-base">${tempH}°</span>
+                                    <span class="text-[10px] text-slate-400 block">Percep. ${appTempH}°</span>
+                                </div>
+                                
+                                <div class="mt-2 pt-2 border-t border-slate-600/50 w-full text-center space-y-1">
+                                    <div class="text-[10px] text-blue-300">💧 ${precipH} mm</div>
+                                    <div class="text-[10px] text-slate-300">💨 ${windSpdH} <span class="text-[8px]">km/h</span> ${dirH}</div>
+                                    <div class="text-[10px] text-slate-400">💦 ${humH}%</div>
+                                </div>
                             </div>
                         `;
                     }
