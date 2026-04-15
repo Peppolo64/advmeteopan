@@ -596,7 +596,7 @@
                             <ul class="space-y-1.5">
                                 <li class="flex justify-between text-orange-300"><span>📸 Golden Hour</span> <span>${formatTime(sunTimes.goldenHour)}</span></li>
                                 <li class="flex justify-between text-orange-200 font-bold border-l-2 border-orange-400 pl-1 -ml-1"><span>☀️ Reale</span> <span>${formatTime(sunTimes.sunset)}</span></li>
-                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hr</span> <span>${formatTime(sunTimes.blueHourEvening)}</span></li>
+                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hour</span> <span>${formatTime(sunTimes.blueHourEvening)}</span></li>
                                 <li class="flex justify-between"><span>🏙️ Civile</span> <span>${formatTime(sunTimes.dusk)}</span></li>
                                 <li class="flex justify-between"><span>⚓ Nautica</span> <span>${formatTime(sunTimes.nauticalDusk)}</span></li>
                                 <li class="flex justify-between"><span>🔭 Astro</span> <span>${formatTime(sunTimes.night)}</span></li>
@@ -762,20 +762,20 @@
                         const dirH = getCompassDir(windDirH);
 
                         hourlyHtml += `
-                            <div class="flex flex-col items-center min-w-[90px] bg-slate-700/40 p-3 rounded-lg border border-slate-600/30 flex-shrink-0">
+                            <div class="flex flex-col items-center min-w-[100px] bg-slate-700/40 p-3 rounded-lg border border-slate-600/30 flex-shrink-0">
                                 <span class="text-sm font-bold text-slate-300 border-b border-slate-600 pb-1 mb-2 w-full text-center">${timeHour}</span>
                                 <span class="text-2xl drop-shadow" title="${wmoH.text}">${wmoH.icon}</span>
-                                <span class="text-[10px] text-slate-400 mt-1 truncate w-full text-center" title="${wmoH.text}">${wmoH.text}</span>
+                                <span class="text-[11px] text-slate-300 mt-1 truncate w-full text-center" title="${wmoH.text}">${wmoH.text}</span>
                                 
                                 <div class="mt-2 text-center">
                                     <span class="font-bold text-white text-base">${tempH}°</span>
-                                    <span class="text-[10px] text-slate-400 block">Percep. ${appTempH}°</span>
+                                    <span class="text-[11px] text-slate-400 block">Percep. ${appTempH}°</span>
                                 </div>
                                 
                                 <div class="mt-2 pt-2 border-t border-slate-600/50 w-full text-center space-y-1">
-                                    <div class="text-[10px] text-blue-300">💧 ${precipH} mm</div>
-                                    <div class="text-[10px] text-slate-300">💨 ${windSpdH} <span class="text-[8px]">km/h</span> ${dirH}</div>
-                                    <div class="text-[10px] text-slate-400">💦 ${humH}%</div>
+                                    <div class="text-[11px] text-blue-300">💧 ${precipH} mm</div>
+                                    <div class="text-[11px] text-slate-300">💨 ${windSpdH} <span class="text-[9px]">km/h</span> ${dirH}</div>
+                                    <div class="text-[11px] text-slate-400">💦 ${humH}%</div>
                                 </div>
                             </div>
                         `;
@@ -808,7 +808,7 @@
 
                         <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50 text-center flex flex-col justify-center">
                             <div class="grid grid-cols-2 gap-2 mb-2 border-b border-slate-600/50 pb-2">
-                                <div class="text-sm"><span class="text-slate-400 text-[10px] uppercase tracking-wider">Vento max</span><br><strong class="text-white text-base">${windMax} km/h</strong></div>
+                                <div class="text-sm"><span class="text-slate-400 text-[10px] uppercase tracking-wider">Vento</span><br><strong class="text-white text-base">${windMax} km/h</strong></div>
                                 <div class="text-sm"><span class="text-slate-400 text-[10px] uppercase tracking-wider">Raffiche</span><br><strong class="text-white text-base">${windGusts} km/h</strong></div>
                             </div>
                             <div class="flex justify-around items-center">
@@ -822,7 +822,7 @@
                     </div>
 
                     <div class="mt-4 bg-slate-700/20 p-3 rounded-lg border border-slate-600/50">
-                        <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">⏱️ Temperature Orarie</h4>
+                        <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">⏱️ Ora per ora</h4>
                         ${hourlyHtml}
                     </div>
 
