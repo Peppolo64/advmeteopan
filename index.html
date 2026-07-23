@@ -329,9 +329,17 @@
                     <button onclick="loadSatelliteGroup('planet')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">🌍 Planet</button>
                 </div>
                 <div id="satelliteStatus" class="text-sm text-slate-400 italic">Apri questa sezione e scegli una categoria per calcolare i passaggi.</div>
+                <div class="flex flex-wrap gap-3 text-[11px] mb-2 p-2 bg-slate-900/40 rounded-lg border border-slate-700">
+                    <span class="text-slate-400 font-semibold">Legenda luminosità:</span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-400"></span><span class="text-red-400">mag &lt;0 Estremo</span></span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span><span class="text-orange-400">0-2 Molto brillante</span></span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-yellow-400"></span><span class="text-yellow-400">2-4 Brillante</span></span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span><span class="text-slate-300">4-6 Debole</span></span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span><span class="text-slate-500">&gt;6 Trascurabile</span></span>
+                </div>
                 <div id="satellitePassesList" class="text-sm space-y-2 text-slate-300"></div>
                 <div class="mt-4 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
-                    <h4 class="font-bold text-slate-200 mb-2 text-sm">🎯 Radar del cielo (traiettorie, primi 5 passaggi)</h4>
+                    <h4 class="font-bold text-slate-200 mb-2 text-sm">🎯 Radar</h4>
                     <div class="mt-4 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
                         <div class="flex justify-between items-center mb-2">
                             <h4 class="font-bold text-slate-200 text-sm">🕐 Finestra di osservazione</h4>
@@ -1243,235 +1251,289 @@
         
 
 
-        // ==========================================
-        // PASSAGGI SATELLITE (satellite.js + TLE CelesTrak)
-        // ==========================================
-        const satGroupCache = {};
-        let lastComputedPasses = [];
+       // ==========================================
+// PASSAGGI SATELLITE (satellite.js + TLE CelesTrak)
+// ==========================================
+const satGroupCache = {};
+let lastComputedPasses = [];
+let lastFilteredPasses = [];
+let currentGroup = null;
 
-        async function loadSatelliteGroup(group) {
-            const statusEl = document.getElementById('satelliteStatus');
-            const listEl = document.getElementById('satellitePassesList');
+function estimateMagnitude(rangeKm, sunElevDeg, satElevDeg, groupName) {
+    const absMagByGroup = { starlink: 4.1, 'iridium-NEXT': 3.0, stations: -1.5, oneweb: 5.5, 'gps-ops': 8.0, planet: 7.0 };
+    const absMag = absMagByGroup[groupName] ?? 6.0;
 
-            if (currentLat === null || currentLon === null) {
-                statusEl.textContent = 'Inserisci coordinate valide e clicca "Aggiorna" nel Pannello di Controllo.';
-                return;
+    const distTerm = 5 * Math.log10(Math.max(rangeKm, 200) / 1000);
+
+    const phaseAngleApprox = 180 - satElevDeg;
+    const phaseTerm = 2.5 * Math.log10(1 / Math.max(0.15, Math.cos(phaseAngleApprox * Math.PI / 360)));
+
+    if (sunElevDeg < -18) return null; // ombra terrestre piena, non illuminato
+    const illumFactor = Math.min(1, Math.max(0, (sunElevDeg + 18) / 12));
+    const illumPenalty = illumFactor > 0.02 ? -2.5 * Math.log10(illumFactor) : 8;
+
+    return Math.round((absMag + distTerm + phaseTerm + illumPenalty) * 10) / 10;
+}
+
+function getAltitudeKm(positionEci) {
+    const EARTH_RADIUS_KM = 6371;
+    const x = positionEci.x, y = positionEci.y, z = positionEci.z;
+    const distFromCenter = Math.sqrt(x * x + y * y + z * z);
+    return Math.round(distFromCenter - EARTH_RADIUS_KM);
+}
+
+function magnitudeLabel(mag) {
+    if (mag === null || mag === undefined) return { text: 'Non illuminato', color: 'text-slate-500', bg: 'bg-slate-800/30' };
+    if (mag < 0) return { text: `mag ${mag} · Estremo`, color: 'text-red-400', bg: 'bg-red-900/30' };
+    if (mag < 2) return { text: `mag ${mag} · Molto brillante`, color: 'text-orange-400', bg: 'bg-orange-900/25' };
+    if (mag < 4) return { text: `mag ${mag} · Brillante`, color: 'text-yellow-400', bg: 'bg-yellow-900/15' };
+    if (mag < 6) return { text: `mag ${mag} · Debole`, color: 'text-slate-300', bg: 'bg-slate-700/30' };
+    return { text: `mag ${mag} · Trascurabile`, color: 'text-slate-500', bg: 'bg-slate-800/20' };
+}
+
+async function loadSatelliteGroup(group) {
+    const statusEl = document.getElementById('satelliteStatus');
+    const listEl = document.getElementById('satellitePassesList');
+    currentGroup = group;
+
+    if (currentLat === null || currentLon === null) {
+        statusEl.textContent = 'Inserisci coordinate valide e clicca "Aggiorna" nel Pannello di Controllo.';
+        return;
+    }
+    const lat = currentLat, lon = currentLon;
+
+    statusEl.textContent = 'Scaricamento dati orbitali (TLE)...';
+    listEl.innerHTML = '';
+
+    try {
+        let satrecs = satGroupCache[group];
+        if (!satrecs) {
+            const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
+            const text = await resp.text();
+            const lines = text.trim().split('\n').map(l => l.trim());
+
+            satrecs = [];
+            const maxSats = (group === 'starlink') ? 30 : 60;
+            for (let i = 0; i < lines.length - 2 && satrecs.length < maxSats; i += 3) {
+                const name = lines[i];
+                const l1 = lines[i + 1], l2 = lines[i + 2];
+                if (!l1 || !l2 || !l1.startsWith('1 ') || !l2.startsWith('2 ')) continue;
+                try {
+                    const satrec = satellite.twoline2satrec(l1, l2);
+                    satrecs.push({ name, satrec });
+                } catch (e) { /* TLE malformato, salta */ }
             }
-            const lat = currentLat, lon = currentLon;
-
-            statusEl.textContent = 'Scaricamento dati orbitali (TLE)...';
-            listEl.innerHTML = '';
-
-            try {
-                let satrecs = satGroupCache[group];
-                if (!satrecs) {
-                    const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
-                    const resp = await fetch(url);
-                    if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
-                    const text = await resp.text();
-                    const lines = text.trim().split('\n').map(l => l.trim());
-
-                    satrecs = [];
-                    const maxSats = (group === 'starlink') ? 30 : 60;
-                    for (let i = 0; i < lines.length - 2 && satrecs.length < maxSats; i += 3) {
-                        const name = lines[i];
-                        const l1 = lines[i + 1], l2 = lines[i + 2];
-                        if (!l1 || !l2 || !l1.startsWith('1 ') || !l2.startsWith('2 ')) continue;
-                        try {
-                            const satrec = satellite.twoline2satrec(l1, l2);
-                            satrecs.push({ name, satrec });
-                        } catch (e) { /* TLE malformato, salta */ }
-                    }
-                    satGroupCache[group] = satrecs;
-                }
-
-                statusEl.textContent = `Calcolo passaggi per ${satrecs.length} satelliti (48h)...`;
-                await new Promise(r => setTimeout(r, 30));
-
-                const observerGd = {
-                    longitude: satellite.degreesToRadians(lon),
-                    latitude: satellite.degreesToRadians(lat),
-                    height: 0.1
-                };
-
-                const now = new Date();
-                const stepMinutes = 1; // maggiore precisione per fasce orarie accurate
-                const totalSteps = Math.floor(48 * 60 / stepMinutes);
-                const passes = [];
-
-                satrecs.forEach(({ name, satrec }) => {
-                    let wasVisible = false;
-                    let passStart = null;
-                    let maxElev = -90;
-                    let maxElevTime = null;
-                    let currentTrack = [];
-
-                    for (let s = 0; s <= totalSteps; s++) {
-                        const t = new Date(now.getTime() + s * stepMinutes * 60000);
-                        const posVel = satellite.propagate(satrec, t);
-                        if (!posVel.position) continue;
-                        const gmst = satellite.gstime(t);
-                        const posEcf = satellite.eciToEcf(posVel.position, gmst);
-                        const lookAngles = satellite.ecfToLookAngles(observerGd, posEcf);
-                        const elevDeg = satellite.radiansToDegrees(lookAngles.elevation);
-                        const azDeg = satellite.radiansToDegrees(lookAngles.azimuth);
-
-                        const sunPos = SunCalc.getPosition(t, lat, lon);
-                        const sunElevDeg = sunPos.altitude * 180 / Math.PI;
-                        const skyIsDark = sunElevDeg < -6;
-
-                        const isVisible = elevDeg > 10 && skyIsDark;
-
-                        if (isVisible && !wasVisible) {
-                            passStart = t;
-                            maxElev = elevDeg;
-                            maxElevTime = t;
-                            currentTrack = [{ az: azDeg, elev: elevDeg, time: t }];
-                        } else if (isVisible && wasVisible) {
-                            if (elevDeg > maxElev) { maxElev = elevDeg; maxElevTime = t; }
-                            currentTrack.push({ az: azDeg, elev: elevDeg, time: t });
-                        } else if (!isVisible && wasVisible) {
-                            const durationMin = Math.round((t - passStart) / 60000);
-                            passes.push({
-                                name, start: passStart, end: t,
-                                maxElev: Math.round(maxElev), maxElevTime,
-                                durationMin, track: currentTrack
-                            });
-                        }
-                        wasVisible = isVisible;
-                    }
-                });
-
-                passes.sort((a, b) => a.start - b.start);
-                lastComputedPasses = passes;
-
-                statusEl.textContent = `${passes.length} passaggi visibili trovati (buio + elevazione min 10°).`;
-
-                onTimeWindowChange();
-
-            } catch (error) {
-                console.error('Errore satelliti:', error);
-                statusEl.textContent = 'Errore nel recupero dati orbitali da CelesTrak.';
-            }
+            satGroupCache[group] = satrecs;
         }
 
-        // ==========================================
-        // RADAR DEL CIELO (traiettorie polari con etichette)
-        // ==========================================
-        function drawSkyRadar(passes, highlightIdx = null) {
-            const canvas = document.getElementById('skyRadarCanvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const cx = canvas.width / 2, cy = canvas.height / 2, R = 170;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        statusEl.textContent = `Calcolo passaggi per ${satrecs.length} satelliti (48h)...`;
+        await new Promise(r => setTimeout(r, 30));
 
-            ctx.strokeStyle = '#475569';
+        const observerGd = {
+            longitude: satellite.degreesToRadians(lon),
+            latitude: satellite.degreesToRadians(lat),
+            height: 0.1
+        };
+
+        const now = new Date();
+        const stepMinutes = 1;
+        const totalSteps = Math.floor(48 * 60 / stepMinutes);
+        const passes = [];
+
+        satrecs.forEach(({ name, satrec }) => {
+            let wasVisible = false;
+            let passStart = null;
+            let maxElev = -90;
+            let maxElevTime = null;
+            let currentTrack = [];
+            let peakMag = null;
+            let peakMagTime = null;
+
+            for (let s = 0; s <= totalSteps; s++) {
+                const t = new Date(now.getTime() + s * stepMinutes * 60000);
+                const posVel = satellite.propagate(satrec, t);
+                if (!posVel.position) continue;
+                const altitudeKm = getAltitudeKm(posVel.position);
+                const gmst = satellite.gstime(t);
+                const posEcf = satellite.eciToEcf(posVel.position, gmst);
+                const lookAngles = satellite.ecfToLookAngles(observerGd, posEcf);
+                const elevDeg = satellite.radiansToDegrees(lookAngles.elevation);
+                const azDeg = satellite.radiansToDegrees(lookAngles.azimuth);
+
+                const sunPos = SunCalc.getPosition(t, lat, lon);
+                const sunElevDeg = sunPos.altitude * 180 / Math.PI;
+                const skyIsDark = sunElevDeg < -6;
+
+                const isVisible = elevDeg > 10 && skyIsDark;
+
+                if (isVisible) {
+                    const rangeKm = lookAngles.rangeSat;
+                    const mag = estimateMagnitude(rangeKm, sunElevDeg, elevDeg, group);
+                    if (mag !== null && (peakMag === null || mag < peakMag)) {
+                        peakMag = mag;
+                        peakMagTime = t;
+                    }
+
+                    if (!wasVisible) {
+                        passStart = t;
+                        maxElev = elevDeg;
+                        maxElevTime = t;
+                        currentTrack = [{ az: azDeg, elev: elevDeg, time: t, mag, altitudeKm }];
+                    } else {
+                        if (elevDeg > maxElev) { maxElev = elevDeg; maxElevTime = t; }
+                        currentTrack.push({ az: azDeg, elev: elevDeg, time: t, mag, altitudeKm });
+                    }
+                
+                    } else if (!isVisible && wasVisible) {
+                        const durationMin = Math.round((t - passStart) / 60000);
+                        const closestToMaxElev = currentTrack.reduce((prev, curr) =>
+                            Math.abs(curr.elev - maxElev) < Math.abs(prev.elev - maxElev) ? curr : prev
+                        , currentTrack[0]);
+                        passes.push({
+                            name, start: passStart, end: t,
+                            maxElev: Math.round(maxElev), maxElevTime,
+                            durationMin, track: currentTrack,
+                            peakMag, peakMagTime,
+                            magAtMaxElev: closestToMaxElev ? closestToMaxElev.mag : null,
+                            altitudeKm: closestToMaxElev ? closestToMaxElev.altitudeKm : null
+                        });
+                    }
+                wasVisible = isVisible;
+            }
+        });
+
+        passes.sort((a, b) => a.start - b.start);
+        lastComputedPasses = passes;
+
+        statusEl.textContent = `${passes.length} passaggi visibili trovati (buio + elevazione min 10°).`;
+
+        onTimeWindowChange();
+
+    } catch (error) {
+        console.error('Errore satelliti:', error);
+        statusEl.textContent = 'Errore nel recupero dati orbitali da CelesTrak.';
+    }
+}
+
+// ==========================================
+// RADAR DEL CIELO (traiettorie polari con etichette)
+// ==========================================
+function drawSkyRadar(passes, highlightIdx = null) {
+    const canvas = document.getElementById('skyRadarCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cx = canvas.width / 2, cy = canvas.height / 2, R = 170;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = '#475569';
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = '#64748b';
+    [0, 30, 60].forEach(elev => {
+        const r = R * (1 - elev / 90);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.fillText(`${90 - elev}°`, cx + 4, cy - r + 10);
+    });
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText('N', cx - 5, cy - R - 8);
+    ctx.fillText('S', cx - 5, cy + R + 18);
+    ctx.fillText('E', cx + R + 8, cy + 4);
+    ctx.fillText('O', cx - R - 20, cy + 4);
+
+    const colors = ['#f97316', '#22d3ee', '#a3e635', '#e879f9', '#fbbf24', '#60a5fa', '#f472b6', '#4ade80'];
+    const toXY = (az, elev) => {
+        const r = R * (1 - elev / 90);
+        const angleRad = (az - 90) * Math.PI / 180;
+        return { x: cx + r * Math.cos(angleRad), y: cy + r * Math.sin(angleRad) };
+    };
+
+    passes.forEach((p, idx) => {
+        if (!p.track || p.track.length === 0) return;
+        const isDimmed = highlightIdx !== null && highlightIdx !== idx;
+        ctx.globalAlpha = isDimmed ? 0.12 : 1;
+        ctx.strokeStyle = colors[idx % colors.length];
+        ctx.lineWidth = isDimmed ? 1.5 : 2.5;
+        ctx.beginPath();
+        p.track.forEach((pt, i) => {
+            const { x, y } = toXY(pt.az, pt.elev);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        const startPt = toXY(p.track[0].az, p.track[0].elev);
+        ctx.fillStyle = colors[idx % colors.length];
+        ctx.beginPath();
+        ctx.arc(startPt.x, startPt.y, 4, 0, 2 * Math.PI);
+        ctx.fill();
+
+        if (!isDimmed) {
+            const magTxt = p.peakMag !== null && p.peakMag !== undefined ? ` (mag ${p.peakMag})` : '';
+            const label = `${p.name} · ${p.start.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}${magTxt}`;
             ctx.font = '10px sans-serif';
-            ctx.fillStyle = '#64748b';
-            [0, 30, 60].forEach(elev => {
-                const r = R * (1 - elev / 90);
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-                ctx.stroke();
-                ctx.fillText(`${90 - elev}°`, cx + 4, cy - r + 10);
-            });
-
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = 'bold 13px sans-serif';
-            ctx.fillText('N', cx - 5, cy - R - 8);
-            ctx.fillText('S', cx - 5, cy + R + 18);
-            ctx.fillText('E', cx + R + 8, cy + 4);
-            ctx.fillText('O', cx - R - 20, cy + 4);
-
-            const colors = ['#f97316', '#22d3ee', '#a3e635', '#e879f9', '#fbbf24', '#60a5fa', '#f472b6', '#4ade80'];
-            const toXY = (az, elev) => {
-                const r = R * (1 - elev / 90);
-                const angleRad = (az - 90) * Math.PI / 180;
-                return { x: cx + r * Math.cos(angleRad), y: cy + r * Math.sin(angleRad) };
-            };
-
-            passes.forEach((p, idx) => {
-                if (!p.track || p.track.length === 0) return;
-                const isDimmed = highlightIdx !== null && highlightIdx !== idx;
-                ctx.globalAlpha = isDimmed ? 0.12 : 1;
-                ctx.strokeStyle = colors[idx % colors.length];
-                ctx.lineWidth = isDimmed ? 1.5 : 2.5;
-                ctx.beginPath();
-                p.track.forEach((pt, i) => {
-                    const { x, y } = toXY(pt.az, pt.elev);
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                });
-                ctx.stroke();
-
-                const startPt = toXY(p.track[0].az, p.track[0].elev);
-                ctx.fillStyle = colors[idx % colors.length];
-                ctx.beginPath();
-                ctx.arc(startPt.x, startPt.y, 4, 0, 2 * Math.PI);
-                ctx.fill();
-
-                if (!isDimmed) {
-                    const label = `${p.name} · ${p.start.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
-                    ctx.font = '10px sans-serif';
-                    ctx.fillStyle = '#e2e8f0';
-                    const offsetX = startPt.x > cx ? 6 : -ctx.measureText(label).width - 6;
-                    ctx.fillText(label, startPt.x + offsetX, startPt.y - 6);
-                }
-                ctx.globalAlpha = 1;
-            });
+            ctx.fillStyle = '#e2e8f0';
+            const offsetX = startPt.x > cx ? 6 : -ctx.measureText(label).width - 6;
+            ctx.fillText(label, startPt.x + offsetX, startPt.y - 6);
         }
+        ctx.globalAlpha = 1;
+    });
+}
 
-        let lastFilteredPasses = [];
+function onTimeWindowChange() {
+    if (!lastComputedPasses.length) return;
+    const slider = document.getElementById('timeWindowSlider');
+    const durationMin = parseInt(document.getElementById('windowDurationSelect').value);
+    const now = new Date();
+    const windowStart = new Date(now.getTime() + parseInt(slider.value) * 60000);
+    const windowEnd = new Date(windowStart.getTime() + durationMin * 60000);
 
-        function onTimeWindowChange() {
-            if (!lastComputedPasses.length) return;
-            const slider = document.getElementById('timeWindowSlider');
-            const durationMin = parseInt(document.getElementById('windowDurationSelect').value);
-            const now = new Date();
-            const windowStart = new Date(now.getTime() + parseInt(slider.value) * 60000);
-            const windowEnd = new Date(windowStart.getTime() + durationMin * 60000);
+    document.getElementById('windowTimeLabel').textContent =
+        `${windowStart.toLocaleString('it-IT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })} → ${windowEnd.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })}`;
 
-            document.getElementById('windowTimeLabel').textContent =
-                `${windowStart.toLocaleString('it-IT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })} → ${windowEnd.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })}`;
+    const inWindow = lastComputedPasses.filter(p => p.start < windowEnd && p.end > windowStart);
+    renderPassesTable(inWindow);
+    drawSkyRadar(inWindow);
+}
 
-            const inWindow = lastComputedPasses.filter(p => p.start < windowEnd && p.end > windowStart);
-            renderPassesTable(inWindow);
-            drawSkyRadar(inWindow);
-        }
+function renderPassesTable(passes) {
+    const listEl = document.getElementById('satellitePassesList');
+    const statusEl = document.getElementById('satelliteStatus');
+    const colors = ['#f97316', '#22d3ee', '#a3e635', '#e879f9', '#fbbf24', '#60a5fa', '#f472b6', '#4ade80'];
 
-        function renderPassesTable(passes) {
-            const listEl = document.getElementById('satellitePassesList');
-            const statusEl = document.getElementById('satelliteStatus');
-            const colors = ['#f97316', '#22d3ee', '#a3e635', '#e879f9', '#fbbf24', '#60a5fa', '#f472b6', '#4ade80'];
+    lastFilteredPasses = passes;
 
-            lastFilteredPasses = passes;
+    if (passes.length === 0) {
+        listEl.innerHTML = '<p class="text-slate-500 italic">Nessun satellite passerà in questa finestra oraria. Cielo libero per la sessione!</p>';
+        statusEl.textContent = 'Finestra selezionata: 0 satelliti in transito.';
+        return;
+    }
 
-            if (passes.length === 0) {
-                listEl.innerHTML = '<p class="text-slate-500 italic">Nessun satellite passerà in questa finestra oraria. Cielo libero per la sessione!</p>';
-                statusEl.textContent = 'Finestra selezionata: 0 satelliti in transito.';
-                return;
-            }
-
-            listEl.innerHTML = passes.map((p, idx) => {
-                const dateLabel = p.start.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit' });
-                const startTime = p.start.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                const endTime = p.end.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                const swatch = `<span class="inline-block w-2.5 h-2.5 rounded-full mr-1" style="background:${colors[idx % colors.length]}"></span>`;
-                return `
-                <div class="flex justify-between items-center bg-slate-700/40 p-2 rounded-lg border border-slate-600/50 hover:bg-slate-700/70 transition cursor-pointer"
-                    onmouseenter="drawSkyRadar(lastFilteredPasses, ${idx})" onmouseleave="drawSkyRadar(lastFilteredPasses)">
-                    <span class="font-semibold text-white flex items-center">${swatch}${p.name}</span>
-                    <span class="text-[11px] text-slate-400">${dateLabel}</span>
-                    <span class="text-slate-200 font-mono">${startTime} → ${endTime}</span>
-                    <span class="text-[11px] text-slate-400">${p.durationMin} min · max ${p.maxElev}° elev.</span>
-                </div>`;
-            }).join('');
-            statusEl.textContent = `${passes.length} satelliti in transito nella finestra selezionata.`;
-        }
-
-        function highlightTrack(idx) {
-            drawSkyRadar(lastComputedPasses, idx);
-        }
-
+    listEl.innerHTML = passes.map((p, idx) => {
+        const dateLabel = p.start.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit' });
+        const startTime = p.start.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        const endTime = p.end.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        const swatch = `<span class="inline-block w-2.5 h-2.5 rounded-full mr-1" style="background:${colors[idx % colors.length]}"></span>`;
+        const magInfo = magnitudeLabel(p.peakMag);
+        return `
+        <div class="flex flex-col gap-1 ${magInfo.bg} p-2 rounded-lg border border-slate-600/50 hover:bg-slate-700/70 transition cursor-pointer"
+             onmouseenter="drawSkyRadar(lastFilteredPasses, ${idx})" onmouseleave="drawSkyRadar(lastFilteredPasses)">
+            <div class="flex justify-between items-center">
+                <span class="font-semibold text-white flex items-center">${swatch}${p.name}</span>
+                <span class="text-[11px] text-slate-400">${dateLabel}</span>
+                <span class="text-slate-200 font-mono">${startTime} → ${endTime}</span>
+            </div>
+            <div class="flex justify-between items-center text-[11px]">
+                <span class="text-slate-400">${p.durationMin} min · max ${p.maxElev}° elev. · ~${p.altitudeKm ?? '--'} km quota</span>
+                <span class="font-semibold ${magInfo.color}">${magInfo.text}</span>
+            </div>
+        </div>`;
+    }).join('');
+    statusEl.textContent = `${passes.length} satelliti in transito nella finestra selezionata.`;
+}
 
 
         function updateCityIframes(cityName, overrideUrls = null) {
