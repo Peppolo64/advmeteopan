@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Meteo Avanzata - Dark Mode</title>
+    <title>SkyGuardian</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -110,9 +111,9 @@
         </details>
 
         <!--<div class="h-8"></div>-->
-        <details class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" open>
+        <details id="sectionCommerciali" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" ontoggle="handleSectionToggle('sectionCommerciali')">
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
-                <h2 class="text-xl font-bold text-white mb-0">Siti commerciali</h2>
+                <h2 class="text-xl font-bold text-white mb-0">🌐 Siti commerciali</h2>
                 <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -151,9 +152,9 @@
         </details>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-            <details class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" open>
+            <details id="sectionOpenMeteo" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" ontoggle="handleSectionToggle('sectionOpenMeteo')">
                 <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
-                    <h2 class="text-lg font-bold text-white mb-0">Bollettino Open-Meteo</h2>
+                    <h2 class="text-xl font-bold text-white mb-0">📊  Bollettino Open-Meteo</h2>
                     <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -168,9 +169,9 @@
                 </div>
             </details>
 
-            <details class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" open>
+            <details id="sectionSoleLuna" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" ontoggle="handleSectionToggle('sectionSoleLuna')">
                 <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
-                    <h2 class="text-lg font-bold text-white mb-0">Sole e Luna</h2>
+                    <h2 class="text-xl font-bold text-white mb-0">🌞 Sole e Luna</h2>
                     <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -186,9 +187,46 @@
             </details>
         </div>
 
-        <details class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" open>
+        <details id="lunarCalendarPanel" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleSectionToggle('lunarCalendarPanel')">
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
-                <h2 class="text-xl font-bold text-white mb-0">Suite avanzata Meteoblue</h2>
+                <h2 class="text-xl font-bold text-white mb-0">🌙 Calendario Lunare</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="px-6 pb-6 space-y-4">
+                <p class="text-xs text-slate-400">Fasi lunari calcolate per le coordinate correnti (approssimazione giornaliera al mezzogiorno locale).</p>
+
+                <div class="flex justify-between items-center">
+                    <button onclick="shiftLunarMonth(-1)" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">&larr; Mese prec.</button>
+                    <h3 id="lunarCalendarLabel" class="text-lg font-bold text-white">--</h3>
+                    <button onclick="shiftLunarMonth(1)" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">Mese succ. &rarr;</button>
+                </div>
+
+                <div class="grid grid-cols-7 gap-1 text-center text-[11px] text-slate-400 font-semibold mt-3">
+                    <div>Lun</div><div>Mar</div><div>Mer</div><div>Gio</div><div>Ven</div><div>Sab</div><div>Dom</div>
+                </div>
+                <div id="lunarCalendarGrid" class="grid grid-cols-7 gap-1"></div>
+
+                <div class="mt-4 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
+                    <h4 class="font-bold text-slate-200 mb-2 text-sm flex items-center gap-1">🌓 Fasi principali del mese</h4>
+                    <ul id="lunarPhasesList" class="text-sm text-slate-300 space-y-1"></ul>
+                </div>
+
+                <div class="mt-2 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
+                    <h4 class="font-bold text-slate-200 mb-2 text-sm flex items-center gap-1">📆 Dettaglio giorno selezionato</h4>
+                    <div id="lunarDayDetail" class="text-sm text-slate-300 space-y-1">
+                        <p class="text-slate-500 italic">Clicca un giorno nel calendario sopra.</p>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <details id="sectionMeteoblue" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleSectionToggle('sectionMeteoblue')">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">🔷 Suite MeteoBlue</h2>
                 <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -224,9 +262,27 @@
             </div>
         </details>
 
-        <details class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" open>
+        <details id="sectionLightPollution" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleSectionToggle('sectionLightPollution')">
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
-                <h2 class="text-xl font-bold text-white mb-0">Altri modelli e satelliti</h2>
+                <h2 class="text-xl font-bold text-white mb-0">🔭 Inquinamento Luminoso</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="px-6 pb-6">
+                <p class="text-xs text-slate-400 mb-4">Mappa VIIRS/Bortle centrata sulle coordinate scelte, utile per valutare la qualità del cielo notturno.</p>
+                <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[650px] flex flex-col">
+                    <a id="linkLightPollution" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                    <iframe id="lightPollutionIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
+                </div>
+            </div>
+        </details>        
+
+        <details id="sectionAltriModelli" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" ontoggle="handleSectionToggle('sectionAltriModelli')">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">🌍 Altri modelli e satelliti</h2>
                 <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -247,6 +303,61 @@
                         <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Satellite Italia</h3>
                         <a href="https://it.sat24.com/it/it" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">https://it.sat24.com/it/it</a>
                         <iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" src="https://widgets.meteox.com/it-IT/widgets/radar/country/it/satellite" style="width:100%!important;max-width:600px!important;max-height:600px!important;height:100%!important;padding:0px;border:none!important;box-sizing:border-box!important;" scrolling="no" frameborder="0"></iframe>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <details id="sectionSatellites" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleSectionToggle('sectionSatellites')">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">🛰️ Passaggi satelliti</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="px-6 pb-6 space-y-4">
+                <p class="text-xs text-slate-400">Calcolo orbitale SGP4 locale (nessun server esterno). Prossimi passaggi nelle 48 ore dalla data/ora corrente.</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="loadSatelliteGroup('stations')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">🛰️ ISS/Stazioni</button>
+                    <button onclick="loadSatelliteGroup('amateur')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">📻 Radioamatoriali</button>
+                    <button onclick="loadSatelliteGroup('starlink')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">🌐 Starlink</button>
+                    <button onclick="loadSatelliteGroup('gps-ops')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">📡 GPS/GNSS</button>
+                    <button onclick="loadSatelliteGroup('oneweb')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">🛰️ OneWeb</button>
+                    <button onclick="loadSatelliteGroup('iridium-NEXT')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">✨ Iridium NEXT</button>
+                    <button onclick="loadSatelliteGroup('planet')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded border border-slate-600 transition text-sm">🌍 Planet</button>
+                </div>
+                <div id="satelliteStatus" class="text-sm text-slate-400 italic">Apri questa sezione e scegli una categoria per calcolare i passaggi.</div>
+                <div id="satellitePassesList" class="text-sm space-y-2 text-slate-300"></div>
+                <div class="mt-4 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
+                    <h4 class="font-bold text-slate-200 mb-2 text-sm">🎯 Radar del cielo (traiettorie)</h4>
+                    <canvas id="skyRadarCanvas" width="400" height="400" class="mx-auto"></canvas>
+                </div>
+            </div>
+        </details>
+
+        <details id="sectionLiveStations" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleSectionToggle('sectionLiveStations')">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">📡 Osserva in Tempo Reale</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="px-6 pb-6">
+                <p class="text-xs text-slate-400 mb-4">Mappe stazioni meteo indipendenti dalla data. Clicca una stazione per leggere l'osservazione.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[700px] flex flex-col">
+                        <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Weather Sicily</h3>
+                        <a id="linkWeatherSicily" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                        <iframe id="weatherSicilyIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
+                    </div>
+                    <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[700px] flex flex-col">
+                        <h3 class="text-center font-bold text-sm text-slate-200 mb-1">WeatherCloud</h3>
+                        <a id="linkWeatherCloud" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
+                        <iframe id="weatherCloudIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
                     </div>
                 </div>
             </div>
@@ -506,10 +617,13 @@
                 alert("Inserisci coordinate e data valide.");
                 return;
             }
-
+/*
             updateSunMoon(lat, lon, dateStr);
             fetchOpenMeteo(lat, lon, dateStr);
+            lunarCalendarDate = new Date(dateStr + 'T12:00:00');
+            renderLunarCalendar();
             updateCoordinateIframes(lat, lon); 
+            updateLightPollution(lat, lon);
 
             const coordKey = `${lat.toFixed(5)},${lon.toFixed(5)}`;
             const label = document.getElementById('detectedCityLabel');
@@ -538,7 +652,92 @@
             const cityName = await fetchNearestMunicipality(lat, lon);
             if (cityName) {
                 updateCityIframes(cityName);
+            } */
+               // Aggiorna stato globale: le sezioni chiuse leggeranno questi valori quando apri
+            currentLat = lat;
+            currentLon = lon;
+            currentDateStr = dateStr;
+
+            // Rilevamento comune montano (leggero, sempre eseguito per l'etichetta)
+            const coordKey = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+            const label = document.getElementById('detectedCityLabel');
+            // ... [mantieni qui la logica esistente di Piano Battaglia / Piano Provenzana se presente] ...
+
+            // Aggiorna solo le sezioni attualmente aperte
+            refreshAllOpenSections();
+        }
+
+        // ==========================================
+        // LAZY LOADING SEZIONI (performance)
+        // ==========================================
+        let currentLat = null, currentLon = null, currentDateStr = null;
+        const loadedSections = {}; // traccia quali sezioni hanno già dati aggiornati per le coordinate correnti
+
+        function isSectionOpen(id) {
+            const el = document.getElementById(id);
+            return el && el.open;
+        }
+
+        function handleSectionToggle(sectionId) {
+            if (!isSectionOpen(sectionId)) return; // si è chiusa, non fare nulla
+            if (currentLat === null || currentLon === null) return; // nessuna coordinata ancora impostata
+
+            // Se già caricata con le coordinate correnti, non ricaricare
+            const coordKey = `${currentLat.toFixed(5)},${currentLon.toFixed(5)},${currentDateStr}`;
+            if (loadedSections[sectionId] === coordKey) return;
+            loadedSections[sectionId] = coordKey;
+
+            refreshSection(sectionId);
+        }
+
+        function refreshSection(sectionId) {
+            const lat = currentLat, lon = currentLon, dateStr = currentDateStr;
+            switch (sectionId) {
+                case 'sectionCommerciali':
+                    fetchNearestMunicipality(lat, lon).then(cityName => {
+                        if (cityName) updateCityIframes(cityName);
+                    });
+                    break;
+                case 'sectionOpenMeteo':
+                    fetchOpenMeteo(lat, lon, dateStr);
+                    break;
+                case 'sectionSoleLuna':
+                    updateSunMoon(lat, lon, dateStr);
+                    break;
+                case 'lunarCalendarPanel':
+                    lunarCalendarDate = new Date(dateStr + "T12:00:00");
+                    renderLunarCalendar();
+                    break;
+                case 'sectionMeteoblue':
+                    updateCoordinateIframes(lat, lon);
+                    break;
+                case 'sectionLightPollution':
+                    updateLightPollution(lat, lon);
+                    break;
+                case 'sectionAltriModelli':
+                    updateCoordinateIframes(lat, lon); // Windy usa la stessa funzione
+                    break;
+                case 'sectionSatellites':
+                    // Nessun auto-load: l'utente sceglie la categoria col bottone
+                    break;
+                case 'sectionLiveStations':
+                    updateLiveStations(lat, lon);
+                    break;
             }
+        }
+
+        function refreshAllOpenSections() {
+            const allSectionIds = [
+                'sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna',
+                'lunarCalendarPanel', 'sectionMeteoblue', 'sectionLightPollution', 'sectionAltriModelli',
+                'sectionSatellites', 'sectionLiveStations'
+            ];
+            allSectionIds.forEach(id => {
+                if (isSectionOpen(id)) {
+                    loadedSections[id] = null; // forza il refresh perché le coordinate sono cambiate
+                    handleSectionToggle(id);
+                }
+            });
         }
 
         // ==========================================
@@ -637,7 +836,7 @@
                         
                         <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
                             <h4 class="font-bold text-amber-400 mb-2 border-b border-slate-600/50 pb-1 flex items-center gap-1">🌅 Alba</h4>
-                            <ul class="space-y-1.5">
+                            <ulu class="space-y-1.5">
                                 <li class="flex justify-between"><span>🔭 Astro (-18°)</span> <span>${formatTime(sunTimes.nightEnd)}</span></li>
                                 <li class="flex justify-between"><span>⚓ Nautica (-12°)</span> <span>${formatTime(sunTimes.nauticalDawn)}</span></li>
                                 <li class="flex justify-between"><span>🏙️ Civile (-6°)</span> <span>${formatTime(sunTimes.dawn)}</span></li>
@@ -665,7 +864,7 @@
                         <span>🔆 Zenith: <strong class="text-white">${formatTime(sunTimes.solarNoon)}</strong> <span class="text-[11px] text-slate-400">(Elev: ${elevZenith !== null ? elevZenith + '°' : '--'}, Azimut: ${azZenith !== null ? azZenith + '° ' + getCompassDir(azZenith) : '--'})</span></span>
                         <span>⏱️ Luce: <strong class="text-white">${luceString}</strong></span>
                     </div>
-                    <p class="text-[11px] text-slate-500 mt-2 italic text-center">⚠️ Dati calcolati per il ${targetDate.toLocaleDateString('it-IT')}</p>
+                    <p class="text-[11px] text-slate-500 mt-2 text-center">⚠️ Dati calcolati per il ${targetDate.toLocaleDateString('it-IT')}</p>
                 </div>
 
                 <div class="border-t border-slate-700 pt-5">
@@ -965,9 +1164,11 @@
             const latAbs = Math.abs(lat).toFixed(3);
             const lonAbs = Math.abs(lon).toFixed(3);
             const meteoblueSlug = `${latAbs}${latDir}${lonAbs}${lonDir}`;
+
             
             const mbDirectLink = `https://www.meteoblue.com/it/tempo/settimana/${meteoblueSlug}`;
             const mbMapLink = `https://www.meteoblue.com/it/tempo/mappe/${meteoblueSlug}`;
+            
             
             document.getElementById('linkMeteogram').href = mbDirectLink;
             document.getElementById('linkMeteogram').innerText = mbDirectLink;
@@ -989,6 +1190,188 @@
             document.getElementById('meteoblueMapIframe').src = `https://www.meteoblue.com/it/tempo/mappe/widget/${meteoblueSlug}?windAnimation=1&gust=1&satellite=1&cloudsAndPrecipitation=1&temperature=1&sunshine=1&extremeForecastIndex=1&geoloc=fixed&tempunit=C&lengthunit=metric&windunit=km%252Fh&zoom=8&autowidth=auto`;
         }
 
+        // ==========================================
+        // INQUINAMENTO LUMINOSO (Light Pollution Map) - DarkSiteFinder
+        // ==========================================
+        function updateLightPollution(lat, lon) {
+            const lpUrl = `https://djlorenz.github.io/astronomy/lp2022/overlay/dark.html#zoom=9&lat=${lat}&lon=${lon}&layers=B0FFFFFFFTFFFFFFFFFF`;
+            document.getElementById('lightPollutionIframe').src = lpUrl;
+            document.getElementById('linkLightPollution').href = lpUrl;
+            document.getElementById('linkLightPollution').innerText = lpUrl;
+        }
+
+
+        // ==========================================
+        // OSSERVA IN TEMPO REALE (stazioni meteo)
+        // ==========================================
+        function updateLiveStations(lat, lon) {
+            const wsUrl = `https://maps.weathersicily.it/?lat=${lat}&lon=${lon}&zoom=10`;
+            document.getElementById('weatherSicilyIframe').src = wsUrl;
+            document.getElementById('linkWeatherSicily').href = wsUrl;
+            document.getElementById('linkWeatherSicily').innerText = wsUrl;
+
+            const wcUrl = `https://app.weathercloud.net/map?lat=${lat}&lon=${lon}&zoom=10&layer=temp`;
+            document.getElementById('weatherCloudIframe').src = wcUrl;
+            document.getElementById('linkWeatherCloud').href = wcUrl;
+            document.getElementById('linkWeatherCloud').innerText = wcUrl;
+        }
+
+        // ==========================================
+        // PASSAGGI SATELLITE (satellite.js + TLE CelesTrak)
+        // ==========================================
+        const satGroupCache = {};
+
+        async function loadSatelliteGroup(group) {
+            const statusEl = document.getElementById('satelliteStatus');
+            const listEl = document.getElementById('satellitePassesList');
+
+            if (currentLat === null || currentLon === null) {
+                statusEl.textContent = 'Inserisci coordinate valide e clicca "Aggiorna" nel Pannello di Controllo.';
+                return;
+            }
+            const lat = currentLat, lon = currentLon;
+
+            statusEl.textContent = 'Scaricamento dati orbitali (TLE)...';
+            listEl.innerHTML = '';
+
+            try {
+                let satrecs = satGroupCache[group];
+                if (!satrecs) {
+                    const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
+                    const resp = await fetch(url);
+                    if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
+                    const text = await resp.text();
+                    const lines = text.trim().split('\n').map(l => l.trim());
+
+                    satrecs = [];
+                    const maxSats = (group === 'starlink') ? 30 : 60;
+                    for (let i = 0; i < lines.length - 2 && satrecs.length < maxSats; i += 3) {
+                        const name = lines[i];
+                        const l1 = lines[i + 1], l2 = lines[i + 2];
+                        if (!l1 || !l2 || !l1.startsWith('1 ') || !l2.startsWith('2 ')) continue;
+                        try {
+                            const satrec = satellite.twoline2satrec(l1, l2);
+                            satrecs.push({ name, satrec });
+                        } catch (e) { /* TLE malformato, salta */ }
+                    }
+                    satGroupCache[group] = satrecs;
+                }
+
+                statusEl.textContent = `Calcolo passaggi per ${satrecs.length} satelliti (48h)...`;
+                await new Promise(r => setTimeout(r, 30));
+
+                const observerGd = {
+                    longitude: satellite.degreesToRadians(lon),
+                    latitude: satellite.degreesToRadians(lat),
+                    height: 0.1
+                };
+
+                const now = new Date();
+                const stepMinutes = 2;
+                const totalSteps = Math.floor(48 * 60 / stepMinutes);
+                const passes = [];
+
+                satrecs.forEach(({ name, satrec }) => {
+                    let wasVisible = false;
+                    let passStart = null;
+                    let maxElev = -90;
+                    let currentTrack = [];
+
+                    for (let s = 0; s <= totalSteps; s++) {
+                        const t = new Date(now.getTime() + s * stepMinutes * 60000);
+                        const posVel = satellite.propagate(satrec, t);
+                        if (!posVel.position) continue;
+                        const gmst = satellite.gstime(t);
+                        const posEcf = satellite.eciToEcf(posVel.position, gmst);
+                        const lookAngles = satellite.ecfToLookAngles(observerGd, posEcf);
+                        const elevDeg = satellite.radiansToDegrees(lookAngles.elevation);
+                        const azDeg = satellite.radiansToDegrees(lookAngles.azimuth);
+
+                        // Cielo osservatore buio? (Sole sotto -6° = crepuscolo civile finito)
+                        const sunPos = SunCalc.getPosition(t, lat, lon);
+                        const sunElevDeg = sunPos.altitude * 180 / Math.PI;
+                        const skyIsDark = sunElevDeg < -6;
+
+                        const isVisible = elevDeg > 10 && skyIsDark;
+
+                        if (isVisible && !wasVisible) {
+                            passStart = t;
+                            maxElev = elevDeg;
+                            currentTrack = [{ az: azDeg, elev: elevDeg }];
+                        } else if (isVisible && wasVisible) {
+                            if (elevDeg > maxElev) maxElev = elevDeg;
+                            currentTrack.push({ az: azDeg, elev: elevDeg });
+                        } else if (!isVisible && wasVisible) {
+                            passes.push({ name, start: passStart, end: t, maxElev: Math.round(maxElev), track: currentTrack });
+                        }
+                        wasVisible = isVisible;
+                    }
+                });
+
+                passes.sort((a, b) => a.start - b.start);
+
+                if (passes.length === 0) {
+                    listEl.innerHTML = '<p class="text-slate-500 italic">Nessun passaggio visibile (buio + sopra 10°) nelle prossime 48 ore.</p>';
+                } else {
+                    listEl.innerHTML = passes.slice(0, 25).map(p => `
+                        <div class="flex justify-between items-center bg-slate-700/40 p-2 rounded-lg border border-slate-600/50">
+                            <span class="font-semibold text-white">${p.name}</span>
+                            <span class="text-slate-300">${p.start.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                            <span class="text-[11px] text-slate-400">max ${p.maxElev}° elev.</span>
+                        </div>
+                    `).join('');
+                }
+                statusEl.textContent = `${passes.length} passaggi visibili trovati (buio + elevazione min 10°).`;
+
+                drawSkyRadar(passes);
+
+            } catch (error) {
+                console.error('Errore satelliti:', error);
+                statusEl.textContent = 'Errore nel recupero dati orbitali da CelesTrak.';
+            }
+        }
+
+        // ==========================================
+        // RADAR DEL CIELO (traiettorie polari)
+        // ==========================================
+        function drawSkyRadar(passes) {
+            const canvas = document.getElementById('skyRadarCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const cx = canvas.width / 2, cy = canvas.height / 2, R = 180;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#475569';
+            [0, 30, 60].forEach(elev => {
+                const r = R * (1 - elev / 90);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                ctx.stroke();
+            });
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('N', cx - 5, cy - R - 5);
+            ctx.fillText('S', cx - 5, cy + R + 15);
+            ctx.fillText('E', cx + R + 5, cy + 4);
+            ctx.fillText('O', cx - R - 15, cy + 4);
+
+            const colors = ['#f97316', '#22d3ee', '#a3e635', '#e879f9', '#fbbf24'];
+            passes.slice(0, 5).forEach((p, idx) => {
+                if (!p.track || p.track.length === 0) return;
+                ctx.strokeStyle = colors[idx % colors.length];
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                p.track.forEach((pt, i) => {
+                    const r = R * (1 - pt.elev / 90);
+                    const angleRad = (pt.az - 90) * Math.PI / 180;
+                    const x = cx + r * Math.cos(angleRad);
+                    const y = cy + r * Math.sin(angleRad);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            });
+        }
         function updateCityIframes(cityName, overrideUrls = null) {
             let url3b, urlIlMeteo, urlMeteoAm;
 
@@ -1018,6 +1401,185 @@
             document.getElementById('linkMeteoAm').href = urlMeteoAm;
             document.getElementById('linkMeteoAm').innerText = urlMeteoAm;
         }
+        // ==========================================
+        // CALENDARIO LUNARE COMPLETO (nuovo modulo)
+        // ==========================================
+        let lunarCalendarDate = new Date();
+        let lunarSelectedDay = null;
+
+        function getMoonPhaseIcon(phase) {
+            if (phase < 0.03 || phase > 0.97) return '🌑';
+            else if (phase < 0.25) return '🌒';
+            else if (phase < 0.28) return '🌓';
+            else if (phase < 0.50) return '🌔';
+            else if (phase < 0.53) return '🌕';
+            else if (phase < 0.75) return '🌖';
+            else if (phase < 0.78) return '🌗';
+            else return '🌘';
+        }
+
+        function getMoonPhaseLabel(phase) {
+            if (phase < 0.03 || phase > 0.97) return 'Luna Nuova';
+            else if (phase < 0.25) return 'Falce crescente';
+            else if (phase < 0.28) return 'Primo Quarto';
+            else if (phase < 0.50) return 'Gibbosa crescente';
+            else if (phase < 0.53) return 'Luna Piena';
+            else if (phase < 0.75) return 'Gibbosa calante';
+            else if (phase < 0.78) return 'Ultimo Quarto';
+            else return 'Falce calante';
+        }
+
+        function shiftLunarMonth(delta) {
+            lunarCalendarDate.setMonth(lunarCalendarDate.getMonth() + delta);
+            renderLunarCalendar();
+        }
+
+        function renderLunarCalendar() {
+            const lat = parseCoordinate(document.getElementById('latInput').value);
+            const lon = parseCoordinate(document.getElementById('lonInput').value);
+            if (isNaN(lat) || isNaN(lon)) return;
+
+            const year = lunarCalendarDate.getFullYear();
+            const month = lunarCalendarDate.getMonth(); // 0-based
+            const monthNames = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+            document.getElementById('lunarCalendarLabel').textContent = `${monthNames[month]} ${year}`;
+
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const firstDayRaw = new Date(year, month, 1).getDay(); // 0=Domenica
+            const offset = (firstDayRaw === 0) ? 6 : firstDayRaw - 1; // riallineo a Lunedì=0
+
+            const selectedDateStr = document.getElementById('dateInput').value;
+
+            let gridHtml = '';
+            for (let i = 0; i < offset; i++) gridHtml += `<div></div>`;
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dObj = new Date(year, month, d, 12, 0, 0);
+                const illum = SunCalc.getMoonIllumination(dObj);
+                const icon = getMoonPhaseIcon(illum.phase);
+                const dateISO = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const isSelected = (dateISO === selectedDateStr) || (dateISO === lunarSelectedDay);
+                const isTodayReal = dateISO === new Date().toISOString().split('T')[0];
+
+                gridHtml += `<div onclick="selectLunarDay('${dateISO}')"
+                    class="cursor-pointer p-1.5 rounded-lg border transition flex flex-col items-center
+                    ${isSelected ? 'border-blue-400 bg-blue-900/40' : 'border-slate-700 bg-slate-700/30 hover:bg-slate-600/40'}
+                    ${isTodayReal ? 'ring-1 ring-amber-400' : ''}">
+                    <span class="text-[11px] text-slate-400">${d}</span>
+                    <span class="text-xl leading-none" title="${(illum.fraction * 100).toFixed(0)}% illuminata">${icon}</span>
+                </div>`;
+            }
+            document.getElementById('lunarCalendarGrid').innerHTML = gridHtml;
+
+            // --- Ricerca fasi principali (Nuova, 1°Q, Piena, Ultimo Q) nel mese ---
+            const targets = [
+                { v: 0,    label: '🌑 Luna Nuova' },
+                { v: 0.25, label: '🌓 Primo Quarto' },
+                { v: 0.5,  label: '🌕 Luna Piena' },
+                { v: 0.75, label: '🌗 Ultimo Quarto' }
+            ];
+            const extStart = new Date(year, month, -3, 12, 0, 0);
+            const extDaysCount = daysInMonth + 8;
+            const phaseSeries = [];
+            for (let i = 0; i <= extDaysCount; i++) {
+                const dt = new Date(extStart);
+                dt.setDate(extStart.getDate() + i);
+                phaseSeries.push({ date: new Date(dt), phase: SunCalc.getMoonIllumination(dt).phase });
+            }
+
+            let foundEvents = [];
+            for (const t of targets) {
+                for (let i = 0; i < phaseSeries.length - 1; i++) {
+                    let p1 = phaseSeries[i].phase, p2 = phaseSeries[i + 1].phase;
+                    if (p2 < p1) p2 += 1; // gestisce il "salto" da 1 a 0
+                    let target = t.v;
+                    if (target < p1) target += 1;
+                    if (target >= p1 && target <= p2) {
+                        const frac = (p2 - p1) === 0 ? 0 : (target - p1) / (p2 - p1);
+                        const eventDate = new Date(phaseSeries[i].date);
+                        eventDate.setHours(eventDate.getHours() + frac * 24);
+                        if (eventDate.getMonth() === month && eventDate.getFullYear() === year) {
+                            foundEvents.push({ label: t.label, date: eventDate });
+                        }
+                    }
+                }
+            }
+            foundEvents.sort((a, b) => a.date - b.date);
+            const listHtml = foundEvents.length
+                ? foundEvents.map(e => `<li class="flex justify-between"><span>${e.label}</span><span class="text-white font-semibold">${e.date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}</span></li>`).join('')
+                : '<li class="text-slate-500 italic">Nessuna fase principale in questo mese.</li>';
+            document.getElementById('lunarPhasesList').innerHTML = listHtml;
+
+            // Se il giorno selezionato appartiene al mese visualizzato, ricarica il dettaglio
+            const refDay = lunarSelectedDay || selectedDateStr;
+            if (refDay) {
+                const [sy, sm] = refDay.split('-').map(Number);
+                if (sy === year && sm - 1 === month) {
+                    selectLunarDay(refDay);
+                } else {
+                    document.getElementById('lunarDayDetail').innerHTML = '<p class="text-slate-500 italic">Clicca un giorno nel calendario sopra.</p>';
+                }
+            }
+        }
+
+        function selectLunarDay(dateISO) {
+            lunarSelectedDay = dateISO;
+            const lat = parseCoordinate(document.getElementById('latInput').value);
+            const lon = parseCoordinate(document.getElementById('lonInput').value);
+            if (isNaN(lat) || isNaN(lon)) return;
+
+            const dObj = new Date(`${dateISO}T12:00:00`);
+            const illum = SunCalc.getMoonIllumination(dObj);
+            const moonTimes = SunCalc.getMoonTimes(dObj, lat, lon);
+
+            const formatTime = (date) => {
+                if (!date || isNaN(date)) return '--:--';
+                return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            };
+
+            const getStandardAzimuth = (azRad) => {
+                let deg = (azRad * 180 / Math.PI) + 180;
+                return Math.round(deg) % 360;
+            };
+            const getCompassDir = (deg) => {
+                const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO', 'N'];
+                return dirs[Math.round(deg / 45)];
+            };
+
+            let riseStr = '--:--', setStr = '--:--', riseDir = '', setDir = '';
+            if (moonTimes.rise) {
+                riseStr = formatTime(moonTimes.rise);
+                const az = getStandardAzimuth(SunCalc.getMoonPosition(moonTimes.rise, lat, lon).azimuth);
+                riseDir = `${az}° ${getCompassDir(az)}`;
+            }
+            if (moonTimes.set) {
+                setStr = formatTime(moonTimes.set);
+                const az = getStandardAzimuth(SunCalc.getMoonPosition(moonTimes.set, lat, lon).azimuth);
+                setDir = `${az}° ${getCompassDir(az)}`;
+            }
+
+            const posNow = SunCalc.getMoonPosition(dObj, lat, lon);
+            const dist = Math.round(posNow.distance);
+            const icon = getMoonPhaseIcon(illum.phase);
+            const label = getMoonPhaseLabel(illum.phase);
+            const dateFmt = dObj.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+            document.getElementById('lunarDayDetail').innerHTML = `
+                <p class="text-slate-300 mb-2"><strong class="text-white">${dateFmt}</strong></p>
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="text-3xl">${icon}</span>
+                    <span>${label} &middot; ${(illum.fraction * 100).toFixed(0)}% illuminata</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-center bg-slate-800/60 p-2 rounded-lg">
+                    <div><div class="text-[11px] text-slate-400">Alba luna</div><div class="font-bold text-white">${riseStr}</div><div class="text-[11px] text-slate-400">&rarr; ${riseDir}</div></div>
+                    <div><div class="text-[11px] text-slate-400">Distanza</div><div class="font-bold text-white">${dist.toLocaleString('it-IT')} km</div></div>
+                    <div><div class="text-[11px] text-slate-400">Tramonto luna</div><div class="font-bold text-white">${setStr}</div><div class="text-[11px] text-slate-400">&rarr; ${setDir}</div></div>
+                </div>
+            `;
+            renderLunarCalendar(); // aggiorna evidenziazione giorno selezionato nella griglia
+        }
+
+
     </script>
 </body>
 </html>
