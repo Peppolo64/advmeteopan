@@ -1579,6 +1579,7 @@ function renderPassesTable(passes) {
         // ==========================================
         let lunarCalendarDate = new Date();
         let lunarSelectedDay = null;
+        const lunarMonthCache = new Map();
 
         function getMoonPhaseIcon(phase) {
             if (phase < 0.03 || phase > 0.97) return '🌑';
@@ -1607,7 +1608,7 @@ function renderPassesTable(passes) {
             renderLunarCalendar();
         }
 
-        function renderLunarCalendar() {
+        function renderLunarCalendar(skipSelectedDayUpdate = false) {
             const lat = parseCoordinate(document.getElementById('latInput').value);
             const lon = parseCoordinate(document.getElementById('lonInput').value);
             if (isNaN(lat) || isNaN(lon)) return;
@@ -1626,10 +1627,56 @@ function renderPassesTable(passes) {
             let gridHtml = '';
             for (let i = 0; i < offset; i++) gridHtml += `<div></div>`;
 
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dObj = new Date(year, month, d, 12, 0, 0);
-                const illum = SunCalc.getMoonIllumination(dObj);
-                const icon = getMoonPhaseIcon(illum.phase);
+            const cacheKey = `${year}-${month}`;
+            let monthData = lunarMonthCache.get(cacheKey);
+            if (!monthData) {
+                const days = [];
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const dObj = new Date(year, month, d, 12, 0, 0);
+                    const illum = SunCalc.getMoonIllumination(dObj);
+                    days.push({ day: d, phase: illum.phase, fraction: illum.fraction });
+                }
+
+                // Include one day on either side to interpolate phases crossing month boundaries.
+                const phaseSeries = [];
+                const phaseStart = new Date(year, month, 0, 12, 0, 0);
+                for (let i = 0; i <= daysInMonth + 1; i++) {
+                    const dt = new Date(phaseStart);
+                    dt.setDate(phaseStart.getDate() + i);
+                    phaseSeries.push({ date: dt, phase: SunCalc.getMoonIllumination(dt).phase });
+                }
+
+                const targets = [
+                    { v: 0,    label: '🌑 Luna Nuova' },
+                    { v: 0.25, label: '🌓 Primo Quarto' },
+                    { v: 0.5,  label: '🌕 Luna Piena' },
+                    { v: 0.75, label: '🌗 Ultimo Quarto' }
+                ];
+                const foundEvents = [];
+                for (const targetPhase of targets) {
+                    for (let i = 0; i < phaseSeries.length - 1; i++) {
+                        let p1 = phaseSeries[i].phase;
+                        let p2 = phaseSeries[i + 1].phase;
+                        if (p2 < p1) p2 += 1;
+                        let target = targetPhase.v;
+                        if (target < p1) target += 1;
+                        if (target >= p1 && target <= p2) {
+                            const fraction = (p2 - p1) === 0 ? 0 : (target - p1) / (p2 - p1);
+                            const eventDate = new Date(phaseSeries[i].date);
+                            eventDate.setHours(eventDate.getHours() + fraction * 24);
+                            if (eventDate.getMonth() === month && eventDate.getFullYear() === year) {
+                                foundEvents.push({ label: targetPhase.label, date: eventDate });
+                            }
+                        }
+                    }
+                }
+                foundEvents.sort((a, b) => a.date - b.date);
+                monthData = { days, foundEvents };
+                lunarMonthCache.set(cacheKey, monthData);
+            }
+
+            for (const dayData of monthData.days) {
+                const { day: d, phase, fraction } = dayData;
                 const dateISO = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const isSelected = (dateISO === selectedDateStr) || (dateISO === lunarSelectedDay);
                 const isTodayReal = dateISO === new Date().toISOString().split('T')[0];
@@ -1639,47 +1686,13 @@ function renderPassesTable(passes) {
                     ${isSelected ? 'border-blue-400 bg-blue-900/40' : 'border-slate-700 bg-slate-700/30 hover:bg-slate-600/40'}
                     ${isTodayReal ? 'ring-1 ring-amber-400' : ''}">
                     <span class="text-[11px] text-slate-400">${d}</span>
-                    <span class="text-xl leading-none" title="${(illum.fraction * 100).toFixed(0)}% illuminata">${icon}</span>
+                    <span class="text-xl leading-none" title="${(fraction * 100).toFixed(0)}% illuminata">${getMoonPhaseIcon(phase)}</span>
                 </div>`;
             }
             document.getElementById('lunarCalendarGrid').innerHTML = gridHtml;
 
-            // --- Ricerca fasi principali (Nuova, 1°Q, Piena, Ultimo Q) nel mese ---
-            const targets = [
-                { v: 0,    label: '🌑 Luna Nuova' },
-                { v: 0.25, label: '🌓 Primo Quarto' },
-                { v: 0.5,  label: '🌕 Luna Piena' },
-                { v: 0.75, label: '🌗 Ultimo Quarto' }
-            ];
-            const extStart = new Date(year, month, -3, 12, 0, 0);
-            const extDaysCount = daysInMonth + 8;
-            const phaseSeries = [];
-            for (let i = 0; i <= extDaysCount; i++) {
-                const dt = new Date(extStart);
-                dt.setDate(extStart.getDate() + i);
-                phaseSeries.push({ date: new Date(dt), phase: SunCalc.getMoonIllumination(dt).phase });
-            }
-
-            let foundEvents = [];
-            for (const t of targets) {
-                for (let i = 0; i < phaseSeries.length - 1; i++) {
-                    let p1 = phaseSeries[i].phase, p2 = phaseSeries[i + 1].phase;
-                    if (p2 < p1) p2 += 1; // gestisce il "salto" da 1 a 0
-                    let target = t.v;
-                    if (target < p1) target += 1;
-                    if (target >= p1 && target <= p2) {
-                        const frac = (p2 - p1) === 0 ? 0 : (target - p1) / (p2 - p1);
-                        const eventDate = new Date(phaseSeries[i].date);
-                        eventDate.setHours(eventDate.getHours() + frac * 24);
-                        if (eventDate.getMonth() === month && eventDate.getFullYear() === year) {
-                            foundEvents.push({ label: t.label, date: eventDate });
-                        }
-                    }
-                }
-            }
-            foundEvents.sort((a, b) => a.date - b.date);
-            const listHtml = foundEvents.length
-                ? foundEvents.map(e => `<li class="flex justify-between"><span>${e.label}</span><span class="text-white font-semibold">${e.date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}</span></li>`).join('')
+            const listHtml = monthData.foundEvents.length
+                ? monthData.foundEvents.map(e => `<li class="flex justify-between"><span>${e.label}</span><span class="text-white font-semibold">${e.date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}</span></li>`).join('')
                 : '<li class="text-slate-500 italic">Nessuna fase principale in questo mese.</li>';
             document.getElementById('lunarPhasesList').innerHTML = listHtml;
 
@@ -1688,7 +1701,7 @@ function renderPassesTable(passes) {
             if (refDay) {
                 const [sy, sm] = refDay.split('-').map(Number);
                 if (sy === year && sm - 1 === month) {
-                    selectLunarDay(refDay);
+                    if (!skipSelectedDayUpdate) selectLunarDay(refDay);
                 } else {
                     document.getElementById('lunarDayDetail').innerHTML = '<p class="text-slate-500 italic">Clicca un giorno nel calendario sopra.</p>';
                 }
@@ -1749,7 +1762,7 @@ function renderPassesTable(passes) {
                     <div><div class="text-[11px] text-slate-400">Tramonto luna</div><div class="font-bold text-white">${setStr}</div><div class="text-[11px] text-slate-400">&rarr; ${setDir}</div></div>
                 </div>
             `;
-            renderLunarCalendar(); // aggiorna evidenziazione giorno selezionato nella griglia
+            renderLunarCalendar(true); // aggiorna evidenziazione senza riaprire il dettaglio
         }
 
 
