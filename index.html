@@ -187,6 +187,98 @@
             </details>
         </div>
 
+        <!-- INIZIO SIMULATORE MAPPA SOLARE/LUNARE -->
+        <details id="sectionSimulatore" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleSimulatoreToggle()">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">🧭 Mappa Solare e Lunare</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            
+            <div class="px-6 pb-6 space-y-4">
+                <!-- Riquadro Dati Modificato -->
+                <div class="bg-slate-900/50 p-4 rounded-lg border border-slate-700 flex flex-col xl:flex-row justify-between items-center gap-4 text-sm">
+                    
+                    <!-- Lato Sinistro: Astro, Alba, Tramonto -->
+                    <div class="flex items-center gap-4 w-full xl:w-auto justify-between xl:justify-start">
+                        <div class="text-slate-300">
+                            <div class="text-xs text-slate-500 uppercase tracking-wider">Astro</div>
+                            <select id="simAstroSelect" onchange="updateSimulatore()" class="bg-slate-700 border border-slate-600 text-white rounded p-1 outline-none">
+                                <option value="sun">☀️ Sole</option>
+                                <option value="moon">🌙 Luna</option>
+                            </select>
+                        </div>
+                        <div class="border-l border-slate-600 pl-4 text-center">
+                            <div class="text-xs text-slate-500 uppercase tracking-wider">Sorge</div>
+                            <div id="simRise" class="font-bold text-amber-400">--:--</div>
+                            <div id="simRiseAz" class="text-[10px] text-slate-400 mt-0.5">Azimut: --°</div>
+                        </div>
+                        <div class="border-l border-slate-600 pl-4 text-center">
+                            <div class="text-xs text-slate-500 uppercase tracking-wider">Tramonta</div>
+                            <div id="simSet" class="font-bold text-orange-400">--:--</div>
+                            <div id="simSetAz" class="text-[10px] text-slate-400 mt-0.5">Azimut: --°</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Lato Destro: Coordinate, Data/Ora, Posizione -->
+                    <div class="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto justify-end">
+                        <div class="text-center sm:text-right border-b sm:border-b-0 sm:border-r border-slate-600 pb-2 sm:pb-0 sm:pr-4">
+                            <div class="font-bold text-slate-300 text-xs">📍 Posizione</div>
+                            <div id="simCoords" class="text-xs text-slate-400 font-mono mt-1">--.----, --.----</div>
+                            <div id="simAlt" class="text-xs text-slate-500 mt-0.5">Alt: calcolo...</div>
+                        </div>
+                        
+                        <div class="text-center sm:text-right bg-slate-800 p-2 rounded border border-slate-600 min-w-[200px]">
+                            <div id="simDateTime" class="font-bold text-white mb-1">--/--/---- --:--</div>
+                            <div id="simPosData" class="text-xs text-blue-300">Azimut: --° | Elev: --°</div>
+                            <div id="simShadowData" class="text-xs text-slate-400 mt-1">Ombra: --</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mappa Leaflet dedicata -->
+                <div class="relative h-[500px] rounded-lg overflow-hidden border border-slate-600 shadow-inner z-0">
+                    <div id="simulatoreMap" class="w-full h-full "></div>
+                    <!-- Selettore Layer -->
+                    <div class="absolute top-2 right-2 z-[1000] bg-slate-800/90 backdrop-blur rounded p-1 border border-slate-600 shadow-lg flex gap-1">
+                        <button onclick="setSimLayer('osm')" id="btnSimOsm" class="px-3 py-1 text-xs font-bold rounded bg-blue-600 text-white">Mappa</button>
+                        <button onclick="setSimLayer('sat')" id="btnSimSat" class="px-3 py-1 text-xs font-bold rounded text-slate-300 hover:bg-slate-700">Satellite</button>
+                    </div>
+                </div>
+
+                <!-- Sliders con etichette -->
+                <div class="space-y-6 mt-4 bg-slate-700/30 p-4 rounded-lg border border-slate-600/50">
+                    <!-- Slider Annuale -->
+                    <div>
+                        <div class="flex items-center gap-4 mb-1">
+                            <label class="w-16 text-xs font-bold text-slate-400 uppercase tracking-wider">Giorno</label>
+                            <input type="range" id="simDaySlider" min="1" max="365" value="1" class="w-full h-2 bg-slate-600 rounded-lg cursor-pointer accent-blue-500" oninput="updateSimulatore()">
+                        </div>
+                        <!-- Indicatori Annuali (ogni 2 mesi) -->
+                        <div class="flex justify-between text-[10px] text-slate-500 ml-20 px-1 font-mono uppercase tracking-widest">
+                            <span>Gen</span><span></span><span>Mar</span><span></span><span>Mag</span><span></span><span>Lug</span><span></span><span>Set</span><span></span><span>Nov</span><span></span><span>Gen</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Slider Orario -->
+                    <div>
+                        <div class="flex items-center gap-4 mb-1">
+                            <label class="w-16 text-xs font-bold text-slate-400 uppercase tracking-wider">Ora</label>
+                            <input type="range" id="simTimeSlider" min="0" max="1440" step="5" value="720" class="w-full h-2 bg-slate-600 rounded-lg cursor-pointer accent-amber-500" oninput="updateSimulatore()">
+                        </div>
+                        <!-- Indicatori Orari -->
+                        <div class="flex justify-between text-[10px] text-slate-500 ml-20 px-1 font-mono">
+                            <span>0</span><span></span><span></span><span>3</span><span></span><span></span><span>6</span><span></span><span></span><span>9</span><span></span><span></span><span>12</span><span></span><span></span><span>15</span><span></span><span></span><span>18</span><span></span><span></span><span>21</span><span></span><span></span><span>24</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </details>
+        <!-- FINE SIMULATORE MAPPA SOLARE/LUNARE -->
+
         <details id="lunarCalendarPanel" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleSectionToggle('lunarCalendarPanel')">
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
                 <h2 class="text-xl font-bold text-white mb-0">🌙 Calendario lunare</h2>
@@ -794,6 +886,11 @@
                 return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
             };
 
+            const formatTimeRange = (start, end) => {
+                if (!start || isNaN(start) || !end || isNaN(end)) return '--:-- - --:--';
+                return `${formatTime(start)} - ${formatTime(end)}`;
+            };
+
             let luceString = "--h --m";
             if (sunTimes.sunrise && sunTimes.sunset) {
                 const diff = sunTimes.sunset - sunTimes.sunrise;
@@ -867,22 +964,22 @@
                         
                         <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
                             <h4 class="font-bold text-amber-400 mb-2 border-b border-slate-600/50 pb-1 flex items-center gap-1">🌅 Alba</h4>
-                            <ulu class="space-y-1.5">
+                            <ul class="space-y-1.5">
                                 <li class="flex justify-between"><span>🔭 Astro (-18°)</span> <span>${formatTime(sunTimes.nightEnd)}</span></li>
                                 <li class="flex justify-between"><span>⚓ Nautica (-12°)</span> <span>${formatTime(sunTimes.nauticalDawn)}</span></li>
                                 <li class="flex justify-between"><span>🏙️ Civile (-6°)</span> <span>${formatTime(sunTimes.dawn)}</span></li>
-                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hour</span> <span>${formatTime(sunTimes.blueHourMorning)}</span></li>
+                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hour</span> <span>${formatTimeRange(sunTimes.dawn, sunTimes.blueHourMorning)}</span></li>
                                 <li class="flex justify-between text-amber-200 font-bold border-l-2 border-amber-400 pl-1 -ml-1"><span>☀️ Reale</span> <span>${azSunrise !== null ? `<span class="text-[10px] text-slate-400">(${azSunrise}° ${getCompassDir(azSunrise)})</span> ` : ''} ${formatTime(sunTimes.sunrise)}</span></li>
-                                <li class="flex justify-between text-orange-300"><span>📸 Golden Hour</span> <span>${formatTime(sunTimes.goldenHourEnd)}</span></li>
+                                <li class="flex justify-between text-orange-300"><span>📸 Golden Hour</span> <span>${formatTimeRange(sunTimes.blueHourMorning, sunTimes.goldenHourEnd)}</span></li>
                             </ul>
                         </div>
 
                         <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
                             <h4 class="font-bold text-orange-400 mb-2 border-b border-slate-600/50 pb-1 flex items-center gap-1">🌇 Tramonto</h4>
                             <ul class="space-y-1.5">
-                                <li class="flex justify-between text-orange-300"><span>📸 Golden Hour</span> <span>${formatTime(sunTimes.goldenHour)}</span></li>
+                                <li class="flex justify-between text-orange-300"><span>📸 Golden Hour</span> <span>${formatTimeRange(sunTimes.goldenHour, sunTimes.blueHourEvening)}</span></li>
                                 <li class="flex justify-between text-amber-200 font-bold border-l-2 border-orange-400 pl-1 -ml-1"><span>☀️ Reale</span> <span>${azSunset !== null ? `<span class="text-[10px] text-slate-400">(${azSunset}° ${getCompassDir(azSunset)})</span> ` : ''} ${formatTime(sunTimes.sunset)}</span></li>
-                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hour</span> <span>${formatTime(sunTimes.blueHourEvening)}</span></li>
+                                <li class="flex justify-between text-blue-300"><span>💙 Blue Hour</span> <span>${formatTimeRange(sunTimes.blueHourEvening, sunTimes.dusk)}</span></li>
                                 <li class="flex justify-between"><span>🏙️ Civile (-6°)</span> <span>${formatTime(sunTimes.dusk)}</span></li>
                                 <li class="flex justify-between"><span>⚓ Nautica (-12°)</span> <span>${formatTime(sunTimes.nauticalDusk)}</span></li>
                                 <li class="flex justify-between"><span>🔭 Astro (-18°)</span> <span>${formatTime(sunTimes.night)}</span></li>
@@ -918,7 +1015,7 @@
                                 <div class="text-[12px] text-slate-300">&rarr; ${albaLunaDir}</div>
                             </div>
                             <div class="border-x border-slate-500/50">
-                                <div class="text-[12px] text-slate-400 font-medium">📐 Culmine (${culmineAlt}°)</div>
+                                <div class="text-[12px] text-slate-400 font-medium">📐 Culmine (Elev. ${culmineAlt}°)</div>
                                 <div class="font-bold text-white text-[17px] my-0.5">${culmineStr}</div>
                                 <div class="text-[12px] text-slate-300">&rarr; ${culmineDir}</div>
                             </div>
@@ -1574,6 +1671,245 @@ function renderPassesTable(passes) {
             document.getElementById('linkMeteoAm').href = urlMeteoAm;
             document.getElementById('linkMeteoAm').innerText = urlMeteoAm;
         }
+
+        // ==========================================
+        // SIMULATORE MAPPA SOLARE/LUNARE (Leaflet + SunCalc 2D)
+        // ==========================================
+        let simMap = null;
+        let simOsmLayer, simSatLayer;
+        let simOverlayGroup = null;
+        let baseDateForSim = new Date();
+        
+        // Cache per evitare di richiamare l'API ad ogni tocco dello slider
+        let simCurrentElevation = '--';
+        let simLastCoords = '';
+
+        async function handleSimulatoreToggle() {
+            const panel = document.getElementById('sectionSimulatore');
+            if (!panel.open) return;
+            
+            const lat = currentLat !== null ? currentLat : 38.1157;
+            const lon = currentLon !== null ? currentLon : 13.3615;
+
+            // Inizializza la mappa solo la prima volta
+            if (!simMap) {
+                initSimulatoreMap(lat, lon);
+            } else {
+                simMap.invalidateSize(); 
+            }
+            
+            // Scarica altitudine (solo se le coordinate sono cambiate)
+            const coordKey = `${lat},${lon}`;
+            if (simLastCoords !== coordKey) {
+                simLastCoords = coordKey;
+                document.getElementById('simAlt').textContent = "Alt: calcolo...";
+                try {
+                    const resp = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`);
+                    const data = await resp.json();
+                    simCurrentElevation = (data && data.elevation && data.elevation.length > 0) 
+                                          ? `${Math.round(data.elevation[0])} m s.l.m.` 
+                                          : "N/D";
+                } catch (e) {
+                    simCurrentElevation = "Errore";
+                }
+            }
+            
+            // Imposta la data base prendendola dalla dashboard
+            const mainDateStr = document.getElementById('dateInput').value;
+            baseDateForSim = mainDateStr ? new Date(`${mainDateStr}T12:00:00`) : new Date();
+            
+            // Calcola il Giorno dell'Anno (1-365) per allineare lo slider
+            const startOfYear = new Date(baseDateForSim.getFullYear(), 0, 0);
+            const diff = baseDateForSim - startOfYear;
+            const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+            
+            // Imposta gli slider
+            document.getElementById('simDaySlider').value = dayOfYear;
+            const now = new Date();
+            document.getElementById('simTimeSlider').value = now.getHours() * 60 + now.getMinutes();
+            
+            updateSimulatore();
+        }
+
+        function initSimulatoreMap(startLat, startLon) {
+            simMap = L.map('simulatoreMap', { zoomControl: false }).setView([startLat, startLon], 14);
+            L.control.zoom({ position: 'bottomright' }).addTo(simMap);
+
+            // OpenStreetMap Ufficiale: Su Vercel funzionerà nativamente senza API Key!
+            // (In locale potresti continuare a vedere pagina grigia o 403 finché non lo pubblichi)
+            simOsmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(simMap);
+
+            simSatLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: '© Esri'
+            });
+
+            simOverlayGroup = L.layerGroup().addTo(simMap);
+        }
+
+        function setSimLayer(layerType) {
+            const btnOsm = document.getElementById('btnSimOsm');
+            const btnSat = document.getElementById('btnSimSat');
+            
+            if (layerType === 'osm') {
+                if (simMap.hasLayer(simSatLayer)) simMap.removeLayer(simSatLayer);
+                if (!simMap.hasLayer(simOsmLayer)) simMap.addLayer(simOsmLayer);
+                btnOsm.className = "px-3 py-1 text-xs font-bold rounded bg-blue-600 text-white";
+                btnSat.className = "px-3 py-1 text-xs font-bold rounded text-slate-300 hover:bg-slate-700";
+            } else {
+                if (simMap.hasLayer(simOsmLayer)) simMap.removeLayer(simOsmLayer);
+                if (!simMap.hasLayer(simSatLayer)) simMap.addLayer(simSatLayer);
+                btnSat.className = "px-3 py-1 text-xs font-bold rounded bg-blue-600 text-white";
+                btnOsm.className = "px-3 py-1 text-xs font-bold rounded text-slate-300 hover:bg-slate-700";
+            }
+        }
+
+        function computeDestinationPoint(lat, lon, distanceMeters, azimuthDeg) {
+            const R = 6378137;
+            const d = distanceMeters;
+            const lat1 = lat * Math.PI / 180;
+            const lon1 = lon * Math.PI / 180;
+            const brng = azimuthDeg * Math.PI / 180;
+
+            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d / R) + Math.cos(lat1) * Math.sin(d / R) * Math.cos(brng));
+            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d / R) * Math.cos(lat1), Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2));
+
+            return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
+        }
+
+        function updateSimulatore() {
+            if (!simMap) return;
+            const lat = currentLat !== null ? currentLat : 38.1157;
+            const lon = currentLon !== null ? currentLon : 13.3615;
+            const isSun = document.getElementById('simAstroSelect').value === 'sun';
+            
+            // Aggiorna UI Coordinate
+            document.getElementById('simCoords').textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+            document.getElementById('simAlt').textContent = `Alt: ${simCurrentElevation}`;
+
+            // Calcolo data simulata dagli slider ASSOLUTI
+            const dayOfYear = parseInt(document.getElementById('simDaySlider').value);
+            const timeMinutes = parseInt(document.getElementById('simTimeSlider').value);
+            
+            // Crea la data partendo da Gennaio dell'anno corrente e aggiungendo il Giorno dell'Anno dello slider
+            const simDate = new Date(baseDateForSim.getFullYear(), 0, dayOfYear);
+            simDate.setHours(Math.floor(timeMinutes / 60), timeMinutes % 60, 0);
+
+            // Aggiorna UI Data e Ora
+            const dateStr = simDate.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeStr = simDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('simDateTime').textContent = `${dateStr} ${timeStr}`;
+
+            simOverlayGroup.clearLayers();
+            simMap.setView([lat, lon], simMap.getZoom(), { animate: false });
+
+            const MAX_RADIUS = 1000; 
+            
+            L.circle([lat, lon], { radius: MAX_RADIUS, color: '#1e293b', weight: 2, fillOpacity: 0, interactive: false }).addTo(simOverlayGroup);
+            L.circleMarker([lat, lon], { radius: 5, color: '#fff', fillColor: '#3b82f6', fillOpacity: 1, weight: 2 }).addTo(simOverlayGroup);
+
+            const getStandardAzimuth = (azRad) => (azRad * 180 / Math.PI + 180) % 360;
+            const getCompDir = (deg) => ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO', 'N'][Math.round(deg / 45) % 8];
+            
+            let riseTime, setTime, posNow, colorArc, colorAstro;
+
+            if (isSun) {
+                const times = SunCalc.getTimes(simDate, lat, lon);
+                riseTime = times.sunrise;
+                setTime = times.sunset;
+                posNow = SunCalc.getPosition(simDate, lat, lon);
+                colorArc = '#f59e0b';
+                colorAstro = '#fbbf24';
+            } else {
+                const times = SunCalc.getMoonTimes(simDate, lat, lon);
+                riseTime = times.rise;
+                setTime = times.set;
+                posNow = SunCalc.getMoonPosition(simDate, lat, lon);
+                colorArc = '#94a3b8';
+                colorAstro = '#cbd5e1';
+            }
+
+            // Testo Alba/Tramonto e calcolo Azimut
+            const formatTime = (d) => d ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+            document.getElementById('simRise').textContent = riseTime ? formatTime(riseTime) : (isSun ? '--:--' : 'Non sorge');
+            document.getElementById('simSet').textContent = setTime ? formatTime(setTime) : (isSun ? '--:--' : 'Non tramonta');
+
+            let riseAzText = '--°', setAzText = '--°';
+            
+            if (riseTime) {
+                const pos = isSun ? SunCalc.getPosition(riseTime, lat, lon) : SunCalc.getMoonPosition(riseTime, lat, lon);
+                const az = getStandardAzimuth(pos.azimuth);
+                riseAzText = `${az.toFixed(1)}° ${getCompDir(az)}`;
+                // Disegna linea alba
+                const pt = computeDestinationPoint(lat, lon, MAX_RADIUS, az);
+                L.polyline([[lat, lon], pt], { color: '#3b82f6', weight: 2, dashArray: '4 4', interactive: false }).addTo(simOverlayGroup);
+            }
+            
+            if (setTime) {
+                const pos = isSun ? SunCalc.getPosition(setTime, lat, lon) : SunCalc.getMoonPosition(setTime, lat, lon);
+                const az = getStandardAzimuth(pos.azimuth);
+                setAzText = `${az.toFixed(1)}° ${getCompDir(az)}`;
+                // Disegna linea tramonto
+                const pt = computeDestinationPoint(lat, lon, MAX_RADIUS, az);
+                L.polyline([[lat, lon], pt], { color: '#ef4444', weight: 2, dashArray: '4 4', interactive: false }).addTo(simOverlayGroup);
+            }
+            
+            document.getElementById('simRiseAz').textContent = `Azimut: ${riseAzText}`;
+            document.getElementById('simSetAz').textContent = `Azimut: ${setAzText}`;
+
+            // Posizione Astro corrente
+            const currentElevDeg = posNow.altitude * 180 / Math.PI;
+            const currentAzDeg = getStandardAzimuth(posNow.azimuth);
+            document.getElementById('simPosData').textContent = `Azimut: ${currentAzDeg.toFixed(1)}° | Elev: ${currentElevDeg.toFixed(1)}°`;
+
+            // Percorso ellittico
+            const pathPoints = [];
+            const dayStart = new Date(simDate);
+            dayStart.setHours(0, 0, 0, 0);
+            for(let m = 0; m < 1440; m += 15) {
+                const t = new Date(dayStart.getTime() + m * 60000);
+                const pos = isSun ? SunCalc.getPosition(t, lat, lon) : SunCalc.getMoonPosition(t, lat, lon);
+                const elev = pos.altitude * 180 / Math.PI;
+                if (elev > 0) {
+                    const az = getStandardAzimuth(pos.azimuth);
+                    const dist = MAX_RADIUS * (1 - (elev / 90));
+                    pathPoints.push(computeDestinationPoint(lat, lon, dist, az));
+                }
+            }
+            if (pathPoints.length > 0) {
+                L.polyline(pathPoints, { color: colorArc, weight: 3, opacity: 0.8, interactive: false }).addTo(simOverlayGroup);
+            }
+
+            // Ombra
+            const shadowText = document.getElementById('simShadowData');
+            if (isSun && currentElevDeg > 0) {
+                const shadowRatio = 1 / Math.tan(posNow.altitude);
+                shadowText.textContent = `Lunghezza ombra (prop): 1:${shadowRatio.toFixed(2)}`;
+                
+                const shadowAzimuth = (currentAzDeg + 180) % 360;
+                let shadowLength = 100 * shadowRatio;
+                if (shadowLength > MAX_RADIUS * 1.5) shadowLength = MAX_RADIUS * 1.5; 
+                
+                const shadowPt = computeDestinationPoint(lat, lon, shadowLength, shadowAzimuth);
+                L.polyline([[lat, lon], shadowPt], { color: '#111827', weight: 8, opacity: 0.5, interactive: false }).addTo(simOverlayGroup);
+            } else {
+                shadowText.textContent = isSun ? 'Sole sotto orizzonte (nessuna ombra)' : 'Ombra non calcolata per la Luna';
+            }
+
+            // Pallino dell'Astro
+            if (currentElevDeg >= 0) {
+                const dist = MAX_RADIUS * (1 - (currentElevDeg / 90));
+                const astroPt = computeDestinationPoint(lat, lon, dist, currentAzDeg);
+                L.circleMarker(astroPt, {
+                    radius: 8, color: '#fff', weight: 2, fillColor: colorAstro, fillOpacity: 1
+                }).addTo(simOverlayGroup);
+            }
+        }
+
+
         // ==========================================
         // CALENDARIO LUNARE COMPLETO (nuovo modulo)
         // ==========================================
