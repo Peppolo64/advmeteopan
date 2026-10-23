@@ -2188,6 +2188,7 @@ function renderPassesTable(passes) {
         let snapshotBusy = false;
         let snapshotFaultPoll = null;
         let snapshotFaultCount = 0;
+        let snapshotWebCacheAvailable = true;
         let lastOpenMeteo = null;      // { lat, lon, data }: ultimo download live di Open-Meteo
         let lastMunicipality = null;   // { lat, lon, cityName, regionName }: ultimo comune rilevato (Nominatim)
         const tleRawCache = {};        // categoria -> [{name,l1,l2}]: TLE già scaricati (solo dati live)
@@ -2684,7 +2685,7 @@ function renderPassesTable(passes) {
                 } catch (error) {
                     validUrl = false;
                 }
-                if (validUrl) {
+                if (validUrl && snapshotWebCacheAvailable) {
                     f.classList.remove('hidden');
                     f.setAttribute('src', 'about:blank');
                     f.setAttribute('src', url);
@@ -2698,12 +2699,15 @@ function renderPassesTable(passes) {
                     ph.className = 'snap-ph flex-grow flex flex-col items-center justify-center text-center gap-2 p-4 rounded bg-slate-900/60 border border-dashed border-slate-600 text-slate-300 text-sm';
                     f.after(ph);
                 }
-                if (validUrl) {
+                if (validUrl && snapshotWebCacheAvailable) {
                     ph.classList.add('hidden');
                 } else {
                     ph.classList.remove('hidden');
-                    ph.innerHTML = '<div class="font-semibold">📴 Pagina non inclusa nello snapshot</div>'
-                        + '<div class="text-xs text-slate-400">URL assente o non valido al momento della cattura.</div>';
+                    ph.innerHTML = validUrl
+                        ? '<div class="font-semibold">📴 Pannello web non disponibile</div>'
+                            + '<div class="text-xs text-slate-400">Questa versione dell’app non include il supporto alla cache web degli snapshot.</div>'
+                        : '<div class="font-semibold">📴 Pagina non inclusa nello snapshot</div>'
+                            + '<div class="text-xs text-slate-400">URL assente o non valido al momento della cattura.</div>';
                 }
             });
         }
@@ -2741,7 +2745,9 @@ function renderPassesTable(passes) {
             const s = activeSnapshotId ? SkySnapshot.get(activeSnapshotId) : null;
             if (!s) { el.classList.add('hidden'); el.innerHTML = ''; return; }
             el.classList.remove('hidden');
-            const webMode = s.webArchive ? 'archivio web parziale e indipendente' : 'cache WebView condivisa (snapshot precedente)';
+            const webMode = !snapshotWebCacheAvailable
+                ? 'pannelli iframe disattivati: plugin cache non disponibile'
+                : s.webArchive ? 'archivio web parziale e indipendente' : 'cache WebView condivisa (snapshot precedente)';
             el.innerHTML = `<span>📦 Stai consultando lo snapshot <strong>[${esc(SkySnapshot.labelFor(s))}]</strong> · scade tra ${SkySnapshot.formatRemaining(SkySnapshot.remainingMs(s))} · ${webMode}</span>`
                 + `<span id="snapshotWebFaultNotice" class="hidden w-full text-xs text-amber-200"></span>`
                 + `<button onclick="updateDashboard()" class="px-3 py-1 rounded bg-amber-700 hover:bg-amber-600 text-white font-semibold text-xs">Esci dallo snapshot</button>`;
@@ -2789,12 +2795,14 @@ function renderPassesTable(passes) {
                 setSnapshotStatus('⏱️ Snapshot scaduto o non più disponibile.');
                 return;
             }
+            snapshotWebCacheAvailable = true;
+            let webCacheWarning = '';
             try {
                 await setSnapshotWebCacheMode(true, s);
             } catch (error) {
                 console.error('Errore attivazione cache WebView per snapshot:', error);
-                setSnapshotStatus(`❌ Impossibile attivare la cache WebView: ${error.message}`);
-                return;
+                snapshotWebCacheAvailable = false;
+                webCacheWarning = ` I pannelli con iframe web sono stati disattivati: ${error.message}`;
             }
             const simWasOpen = isSectionOpen('sectionSimulatore');
             activeSnapshotId = id;
@@ -2824,11 +2832,13 @@ function renderPassesTable(passes) {
             updateDashboard({ fromSnapshot: true });   // aggiorna lo stato globale e ridisegna i pannelli aperti dallo snapshot
             if (s.sections.sectionSimulatore && simWasOpen) handleSimulatoreToggle();   // già aperto: niente evento toggle
             renderSnapshotBanner();
-            startSnapshotFaultMonitor();
+            if (snapshotWebCacheAvailable) startSnapshotFaultMonitor();
+            else stopSnapshotFaultMonitor();
             renderSnapshotList();
-            setSnapshotStatus(s.webArchive
+            const loadedMessage = s.webArchive
                 ? `📦 Snapshot [${SkySnapshot.labelFor(s)}] caricato. Le pagine iframe vengono servite dall'archivio separato; eventuali risorse mancanti saranno segnalate.`
-                : `📦 Snapshot [${SkySnapshot.labelFor(s)}] precedente alla cattura per-snapshot: gli iframe usano la cache WebView condivisa.`);
+                : `📦 Snapshot [${SkySnapshot.labelFor(s)}] precedente alla cattura per-snapshot: gli iframe usano la cache WebView condivisa.`;
+            setSnapshotStatus(loadedMessage + webCacheWarning);
         }
 
         async function exitSnapshotMode() {

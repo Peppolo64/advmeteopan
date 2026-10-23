@@ -92,6 +92,44 @@ assert.deepStrictEqual(
   'il plugin deve ricevere gli URL iframe di tutte le sezioni catturate'
 );
 
+const applySnapshotIframes = html.match(/function applySnapshotIframes\(sectionId, snapshotSection\) \{[\s\S]*?\n        \}/);
+assert(applySnapshotIframes, 'applicazione iframe durante la consultazione snapshot mancante');
+const frameClasses = new Set();
+const iframe = {
+  dataset: {},
+  attributes: { src: 'https://meteo.example/page' },
+  classList: {
+    add: (name) => frameClasses.add(name),
+    remove: (name) => frameClasses.delete(name),
+  },
+  getAttribute(name) { return this.attributes[name] || ''; },
+  setAttribute(name, value) { this.attributes[name] = value; },
+  after(node) { this.nextElementSibling = node; },
+};
+const placeholderClasses = new Set(['snap-ph']);
+const placeholder = {
+  classList: {
+    contains: (name) => placeholderClasses.has(name),
+    add: (name) => placeholderClasses.add(name),
+    remove: (name) => placeholderClasses.delete(name),
+  },
+  innerHTML: '',
+};
+vm.runInNewContext(
+  `${applySnapshotIframes[0]}; applySnapshotIframes('sectionCommerciali', { frames: [{ index: 0, src: 'https://meteo.example/page' }] });`,
+  {
+    URL,
+    snapshotWebCacheAvailable: false,
+    document: {
+      getElementById: () => ({ querySelectorAll: () => [iframe] }),
+      createElement: () => placeholder,
+    },
+  }
+);
+assert.strictEqual(iframe.attributes.src, 'about:blank', 'senza plugin iframe deve essere disabilitato evitando richieste live');
+assert(frameClasses.has('hidden'), 'senza plugin l’iframe deve essere nascosto, non interrompere lo snapshot');
+assert(placeholder.innerHTML.includes('non include il supporto'), 'il pannello iframe deve spiegare perché non è disponibile');
+
 const nativeCachePlugin = fs.readFileSync(
   path.join(root, 'android', 'app', 'src', 'main', 'java', 'it', 'skyguardian', 'app', 'OfflineWebCachePlugin.java'),
   'utf8'

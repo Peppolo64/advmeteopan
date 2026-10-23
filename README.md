@@ -48,6 +48,8 @@ Durante la cattura, l'app ricarica gli iframe dei pannelli aperti e il plugin na
 
 Gli snapshot creati da versioni precedenti non contengono l'archivio privato e continuano a usare la vecchia cache WebView condivisa.
 
+Se il plugin Android non è presente o non riesce ad attivarsi, lo snapshot dei dati locali continua a caricarsi; vengono disattivati solo gli iframe e il relativo pannello spiega il motivo.
+
 La cattura è best-effort, non un salvataggio completo del sito. Sono archiviate solo richieste GET completate durante la cattura; POST, risposte oltre i limiti, risorse con `Cache-Control: no-store`, contenuti caricati successivamente, richieste senza un referrer associabile, autenticazioni/cookie dinamici e servizi che cambiano origine possono mancare. Risorse web mancanti vengono bloccate durante la consultazione, invece di essere prese dalla cache condivisa o dalla rete; il banner mostra un **Web cache fault** con il numero e alcuni dettagli delle risorse mancanti. I dati dei siti terzi potrebbero quindi apparire incompleti o non interattivi.
 
 L'archivio privato viene mantenuto per i 24h dello snapshot. La dimensione mostrata nella lista distingue i dati strutturati dai MiB web archiviati. Questa funzione è disponibile nell'app Android; la versione web pubblica non può intercettare le risposte cross-origin degli iframe.
