@@ -1,0 +1,8 @@
+{
+  "appId": "it.skyguardian.app",
+  "appName": "SkyGuardian",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

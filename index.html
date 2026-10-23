@@ -1,20 +1,34 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="it" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkyGuardian</title>
+    <script>
+        const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+        const offlineWebCache = isNativeApp && window.Capacitor.registerPlugin
+            ? window.Capacitor.registerPlugin('OfflineWebCache')
+            : null;
+        if (isNativeApp) document.documentElement.classList.add('native-app');
+    </script>
+    <meta name="theme-color" content="#0f172a">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    
+    <script src="snapshot.js"></script>
+    <script src="tilestore.js"></script>
+
     <style>
+        html:not(.native-app) #snapshotModeBanner,
+        html:not(.native-app) #snapshotControls {
+            display: none !important;
+        }
+
         /* Forza il tema scuro sui controlli nativi del browser */
         :root { color-scheme: dark; }
-        
+
         /* Filtro avanzato per far diventare "Dark" la mappa cartografica di OpenStreetMap */
         .dark-map .leaflet-layer,
         .dark-map .leaflet-control-zoom-in,
@@ -25,6 +39,8 @@
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 p-6 font-sans antialiased" onload="initDashboard()">
+
+    <div id="snapshotModeBanner" class="hidden sticky top-0 z-40 -mx-6 -mt-6 mb-4 px-6 py-3 bg-amber-900/95 border-b border-amber-600 text-amber-100 text-sm flex flex-wrap items-center justify-between gap-2"></div>
 
     <div id="mapModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex justify-center items-center p-4">
         <div class="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 w-full max-w-4xl flex flex-col overflow-hidden">
@@ -37,7 +53,7 @@
     </div>
 
     <div class="max-w-7xl mx-auto space-y-8">
-        
+
         <details class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" open>
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
                 <h1 class="text-2xl font-bold text-white mb-0">Pannello di Controllo</h1>
@@ -47,9 +63,9 @@
                     </svg>
                 </span>
             </summary>
-            
+
             <div class="px-6 pb-6 space-y-4">
-            
+
             <div class="space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                     <div>
@@ -64,7 +80,7 @@
                             <option value="37.855219, 13.395388">Rocca Busambra</option>
                             <option value="37.978765, 13.290819">Piana degli Albanesi</option>
                             <option value="37.993958, 13.263495">Monte Pizzuta</option>
-                            <option value="37.950206, 13.609353">Eremo di San Felice</option> 
+                            <option value="37.950206, 13.609353">Eremo di San Felice</option>
                             <option value="37.875479, 14.027481">Piano Battaglia</option>
                             <option value="37.894083, 14.025414">Pizzo Carbonara</option>
                             <option value="37.895988, 14.066772">Piano Pomo</option>
@@ -75,12 +91,12 @@
                     <div>
                         <label class="block text-sm font-medium text-slate-300">Ricerca Località</label>
                         <div class="flex mt-1 shadow-sm relative">
-                            <input type="text" id="searchInput" placeholder="Es. Etna, Catania, Cefalù..." 
-                                class="w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-l focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                            <input type="text" id="searchInput" placeholder="Es. Etna, Catania, Cefalù..."
+                                class="w-full p-2 bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-l focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                 onkeypress="if(event.key === 'Enter') geocodeLocation()"
                                 oninput="handleSearchSuggestions()" autocomplete="off">
                             <button onclick="geocodeLocation()" class="bg-blue-600 text-white px-4 rounded-r hover:bg-blue-500 transition border border-blue-600" title="Cerca e Aggiorna">🔍</button>
-                            
+
                             <ul id="suggestionsBox" class="absolute top-full left-0 w-full mt-1 bg-slate-700 border border-slate-600 rounded shadow-2xl z-50 hidden max-h-60 overflow-y-auto text-sm text-left">
                             </ul>
                         </div>
@@ -105,6 +121,24 @@
                         <button onclick="updateDashboard()" class="w-full bg-blue-600 text-white font-semibold p-2 rounded hover:bg-blue-500 transition shadow-lg">
                             Aggiorna
                         </button>
+                    </div>
+                </div>
+
+                <div id="snapshotControls" class="pt-4 border-t border-slate-700 space-y-3">
+                    <div class="flex flex-col md:flex-row md:items-center gap-3">
+                        <button id="snapshotBtn" onclick="takeSnapshot24h()" class="bg-amber-600 text-white font-semibold px-4 py-2 rounded hover:bg-amber-500 transition shadow-lg disabled:opacity-60">
+                            📸 Cattura Snapshot Offline di 24h
+                        </button>
+                        <span id="connectionBadge" class="text-xs px-2 py-1 rounded-full border border-slate-600 text-slate-300 w-fit">● --</span>
+                        <div id="snapshotStatus" class="text-xs text-slate-400 md:flex-1">Salva i dati dei pannelli aperti per 24 ore (massimo 5 snapshot). Le pagine iframe vengono archiviate in modo parziale e indipendente per snapshot; alcune risorse potrebbero mancare.</div>
+                    </div>
+                    <div id="snapshotOfflineHint" class="hidden text-xs text-amber-300">📴 Sei offline: tocca «Consulta lo snapshot offline» per aprire i dati salvati.</div>
+                    <div id="snapshotList" class="space-y-2"></div>
+                    <div class="flex flex-col md:flex-row md:items-center gap-2 pt-3 border-t border-slate-700/60">
+                        <button id="wipeBtn" onclick="wipeAllAppData()" class="w-fit text-xs px-3 py-1.5 rounded border border-red-700 text-red-300 hover:bg-red-900/40 transition">
+                            🧹 Cancella tutti i dati dell'app
+                        </button>
+                        <span class="text-[11px] text-slate-500">Snapshot, tile, archivio locale e cookie dell'app. I dati dei siti incorporati si eliminano da Impostazioni › App › SkyGuardian › Archiviazione › Cancella dati.</span>
                     </div>
                 </div>
             </div>
@@ -135,17 +169,17 @@
                     <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
                         <h3 class="text-center font-bold text-sm text-slate-200 mb-1">3BMeteo</h3>
                         <a id="link3b" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
-                        <iframe id="treBMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
+                        <iframe sandbox="allow-scripts allow-same-origin allow-popups allow-forms" id="treBMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
                     </div>
                     <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
                         <h3 class="text-center font-bold text-sm text-slate-200 mb-1">IlMeteo</h3>
                         <a id="linkIlMeteo" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
-                        <iframe id="ilMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
+                        <iframe sandbox="allow-scripts allow-same-origin allow-popups allow-forms" id="ilMeteoIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
                     </div>
                     <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[80vh] flex flex-col">
                         <h3 class="text-center font-bold text-sm text-slate-200 mb-1">MeteoAM</h3>
                         <a id="linkMeteoAm" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
-                        <iframe id="meteoAmIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
+                        <iframe sandbox="allow-scripts allow-same-origin allow-popups allow-forms" id="meteoAmIframe" width="100%" height="100%" frameborder="0" src="" class="rounded bg-white flex-grow"></iframe>
                     </div>
                 </div>
             </div>
@@ -197,11 +231,11 @@
                     </svg>
                 </span>
             </summary>
-            
+
             <div class="px-6 pb-6 space-y-4">
                 <!-- Riquadro Dati Modificato -->
                 <div class="bg-slate-900/50 p-4 rounded-lg border border-slate-700 flex flex-col xl:flex-row justify-between items-center gap-4 text-sm">
-                    
+
                     <!-- Lato Sinistro: Astro, Alba, Tramonto -->
                     <div class="flex items-center gap-4 w-full xl:w-auto justify-between xl:justify-start">
                         <div class="text-slate-300">
@@ -222,7 +256,7 @@
                             <div id="simSetAz" class="text-[10px] text-slate-400 mt-0.5">Azimut: --°</div>
                         </div>
                     </div>
-                    
+
                     <!-- Lato Destro: Coordinate, Data/Ora, Posizione -->
                     <div class="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto justify-end">
                         <div class="text-center sm:text-right border-b sm:border-b-0 sm:border-r border-slate-600 pb-2 sm:pb-0 sm:pr-4">
@@ -230,7 +264,7 @@
                             <div id="simCoords" class="text-xs text-slate-400 font-mono mt-1">--.----, --.----</div>
                             <div id="simAlt" class="text-xs text-slate-500 mt-0.5">Alt: calcolo...</div>
                         </div>
-                        
+
                         <div class="text-center sm:text-right bg-slate-800 p-2 rounded border border-slate-600 min-w-[200px]">
                             <div id="simDateTime" class="font-bold text-white mb-1">--/--/---- --:--</div>
                             <div id="simPosData" class="text-xs text-blue-300">Azimut: --° | Elev: --°</div>
@@ -262,7 +296,7 @@
                             <span>Gen</span><span></span><span>Mar</span><span></span><span>Mag</span><span></span><span>Lug</span><span></span><span>Set</span><span></span><span>Nov</span><span></span><span>Gen</span>
                         </div>
                     </div>
-                    
+
                     <!-- Slider Orario -->
                     <div>
                         <div class="flex items-center gap-4 mb-1">
@@ -367,10 +401,10 @@
                 <p class="text-xs text-slate-400 mb-4">Mappa VIIRS/Bortle centrata sulle coordinate scelte, utile per valutare la qualità del cielo notturno.</p>
                 <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[650px] flex flex-col">
                     <a id="linkLightPollution" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
-                    <iframe id="lightPollutionIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
+                    <iframe sandbox="allow-scripts allow-same-origin allow-popups allow-forms" id="lightPollutionIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
                 </div>
             </div>
-        </details>        
+        </details>
 
         <details id="sectionAltriModelli" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" ontoggle="handleSectionToggle('sectionAltriModelli')">
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
@@ -388,7 +422,7 @@
                     <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[800px] flex flex-col col-span-1 md:col-span-2">
                         <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Windy</h3>
                         <a id="linkWindy" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
-                        <iframe id="windyIframe" width="100%" height="100%" frameborder="0" src="" class="rounded flex-grow"></iframe>
+                        <iframe sandbox="allow-scripts allow-same-origin allow-popups allow-forms" id="windyIframe" width="100%" height="100%" frameborder="0" src="" class="rounded flex-grow"></iframe>
                     </div>
 
                     <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[650px] overflow-hidden col-span-1 md:col-span-2 flex flex-col items-center">
@@ -475,12 +509,12 @@
                     <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[700px] flex flex-col">
                         <h3 class="text-center font-bold text-sm text-slate-200 mb-1">Weather Sicily</h3>
                         <a id="linkWeatherSicily" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
-                        <iframe id="weatherSicilyIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
+                        <iframe sandbox="allow-scripts allow-same-origin allow-popups allow-forms" id="weatherSicilyIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
                     </div>
                     <div class="bg-slate-800 p-2 rounded-lg shadow-lg border border-slate-700 h-[700px] flex flex-col">
                         <h3 class="text-center font-bold text-sm text-slate-200 mb-1">WeatherCloud</h3>
                         <a id="linkWeatherCloud" href="#" target="_blank" class="text-[11px] text-blue-400 text-center mb-2 truncate block hover:underline">In attesa di URL...</a>
-                        <iframe id="weatherCloudIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
+                        <iframe sandbox="allow-scripts allow-same-origin allow-popups allow-forms" id="weatherCloudIframe" width="100%" height="100%" frameborder="0" class="rounded flex-grow bg-white"></iframe>
                     </div>
                 </div>
             </div>
@@ -497,13 +531,13 @@
         // ==========================================
         function openMapModal() {
             document.getElementById('mapModal').classList.remove('hidden');
-            
+
             let startLat = parseFloat(document.getElementById('latInput').value) || 41.8719;
             let startLon = parseFloat(document.getElementById('lonInput').value) || 12.5674;
 
             if (!map) {
                 map = L.map('map').setView([startLat, startLon], 6);
-                
+
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(map);
@@ -515,18 +549,18 @@
                 map.on('click', function(e) {
                     const lat = e.latlng.lat.toFixed(5);
                     const lon = e.latlng.lng.toFixed(5);
-                    
+
                     document.getElementById('latInput').value = lat;
                     document.getElementById('lonInput').value = lon;
-                    
+
                     if (mapMarker) {
                         mapMarker.setLatLng(e.latlng);
                     } else {
                         mapMarker = L.marker(e.latlng).addTo(map);
                     }
-                    
+
                     document.getElementById('presetSelect').value = "";
-                    
+
                     setTimeout(() => {
                         closeMapModal();
                         updateDashboard();
@@ -552,6 +586,7 @@
         // PARSER COORDINATE E HANDLER
         // ==========================================
         function initDashboard() {
+            if (isNativeApp) initSnapshots();
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('dateInput').value = today;
             document.getElementById('presetSelect').value = "38.1157,13.3615";
@@ -570,7 +605,7 @@
 
         function parseCoordinate(coordStr) {
             if (!coordStr) return NaN;
-            coordStr = coordStr.trim().replace(',', '.'); 
+            coordStr = coordStr.trim().replace(',', '.');
             if (/[°'"NSEWNO]/i.test(coordStr)) {
                 const regex = /(\d+)[°\s]+(\d+)['\s]+([\d\.]+)[s"”'’]*\s*([NSEWNO])/i;
                 const match = coordStr.match(regex);
@@ -610,7 +645,7 @@
         async function handleSearchSuggestions() {
             const query = document.getElementById('searchInput').value.trim();
             const box = document.getElementById('suggestionsBox');
-            
+
             // Inizia a cercare solo se ci sono almeno 3 caratteri
             if (query.length < 3) {
                 box.classList.add('hidden');
@@ -620,7 +655,7 @@
 
             // Cancella il timer precedente se l'utente sta ancora digitando
             clearTimeout(searchTimeout);
-            
+
             // Attende 400ms prima di fare la chiamata per evitare sovraccarichi
             searchTimeout = setTimeout(async () => {
                 try {
@@ -629,13 +664,13 @@
                     const data = await response.json();
 
                     box.innerHTML = ''; // Svuota risultati precedenti
-                    
+
                     if (data && data.length > 0) {
                         data.forEach(item => {
                             const li = document.createElement('li');
                             li.className = "p-2 hover:bg-slate-600 cursor-pointer border-b border-slate-600/50 last:border-0 text-slate-200 transition line-clamp-2";
                             li.textContent = item.display_name;
-                            
+
                             // Quando l'utente clicca il suggerimento
                             li.onclick = () => {
                                 document.getElementById('searchInput').value = item.display_name; // Mette il nome nella casella
@@ -643,7 +678,7 @@
                                 document.getElementById('lonInput').value = parseFloat(item.lon).toFixed(5);
                                 document.getElementById('presetSelect').value = "";
                                 box.classList.add('hidden'); // Nasconde la tendina
-                                
+
                                 if (mapMarker) {
                                     mapMarker.setLatLng([item.lat, item.lon]);
                                     if (map) map.setView([item.lat, item.lon], 10);
@@ -660,7 +695,7 @@
                 } catch (e) {
                     console.error("Errore autocompletamento:", e);
                 }
-            }, 400); 
+            }, 400);
         }
 
         // Chiude la tendina se si fa click altrove sulla pagina
@@ -690,22 +725,22 @@
                 // Interroga Nominatim per convertire il nome in coordinate
                 const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=it`;
                 const response = await fetch(url, { headers: { 'Accept-Language': 'it' } });
-                
+
                 if (!response.ok) throw new Error("Errore HTTP");
-                
+
                 const data = await response.json();
 
                 if (data && data.length > 0) {
                     const lat = parseFloat(data[0].lat).toFixed(5);
                     const lon = parseFloat(data[0].lon).toFixed(5);
-                    
+
                     // Scrive le coordinate trovate nei rispettivi campi
                     document.getElementById('latInput').value = lat;
                     document.getElementById('lonInput').value = lon;
-                    
+
                     // Svuota la tendina dei preset per non creare confusione
                     document.getElementById('presetSelect').value = "";
-                    
+
                     // Riposiziona il marker se la mappa era stata già aperta
                     if (mapMarker) {
                         mapMarker.setLatLng([lat, lon]);
@@ -729,7 +764,9 @@
         // ==========================================
         // MOTORE PRINCIPALE DI AGGIORNAMENTO
         // ==========================================
-        async function updateDashboard() {
+        async function updateDashboard(opts) {
+            // "Aggiorna" (o un cambio di località) riporta ai dati live: solo "Consulta lo snapshot" passa fromSnapshot.
+            if (!(opts && opts.fromSnapshot) && activeSnapshotId) await exitSnapshotMode();
             const latStr = document.getElementById('latInput').value;
             const lonStr = document.getElementById('lonInput').value;
             const lat = parseCoordinate(latStr);
@@ -745,31 +782,31 @@
             fetchOpenMeteo(lat, lon, dateStr);
             lunarCalendarDate = new Date(dateStr + 'T12:00:00');
             renderLunarCalendar();
-            updateCoordinateIframes(lat, lon); 
+            updateCoordinateIframes(lat, lon);
             updateLightPollution(lat, lon);
 
             const coordKey = `${lat.toFixed(5)},${lon.toFixed(5)}`;
             const label = document.getElementById('detectedCityLabel');
 
-            if (coordKey === "37.87548,14.02748") { 
+            if (coordKey === "37.87548,14.02748") {
                 label.innerHTML = `Località montana rilevata: <strong>Piano Battaglia</strong>`;
                 label.className = "text-sm px-3 py-1 bg-blue-900 text-blue-200 rounded-full border border-blue-700 shadow-inner";
                 updateCityIframes(null, {
                     url3b: "https://www.3bmeteo.com/meteo/piano+battaglia",
                     urlIlMeteo: "https://www.ilmeteo.it/meteo/piano+battaglia",
-                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/isnello" 
+                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/isnello"
                 });
-                return; 
-            } 
-            else if (coordKey === "37.79914,15.03950") { 
+                return;
+            }
+            else if (coordKey === "37.79914,15.03950") {
                 label.innerHTML = `Località montana rilevata: <strong>Piano Provenzana</strong>`;
                 label.className = "text-sm px-3 py-1 bg-blue-900 text-blue-200 rounded-full border border-blue-700 shadow-inner";
                 updateCityIframes(null, {
                     url3b: "https://www.3bmeteo.com/meteo/piano+provenzana",
-                    urlIlMeteo: "https://www.ilmeteo.it/meteo/linguaglossa", 
-                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/linguaglossa" 
+                    urlIlMeteo: "https://www.ilmeteo.it/meteo/linguaglossa",
+                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/linguaglossa"
                 });
-                return; 
+                return;
             }
 
             const cityName = await fetchNearestMunicipality(lat, lon);
@@ -786,6 +823,8 @@
             const label = document.getElementById('detectedCityLabel');
             // ... [mantieni qui la logica esistente di Piano Battaglia / Piano Provenzana se presente] ...
 
+            // Invalida tutto: anche le sezioni chiuse devono ricaricarsi (live o snapshot) alla prossima apertura
+            Object.keys(loadedSections).forEach(k => { loadedSections[k] = null; });
             // Aggiorna solo le sezioni attualmente aperte
             refreshAllOpenSections();
         }
@@ -815,11 +854,26 @@
 
         function refreshSection(sectionId) {
             const lat = currentLat, lon = currentLon, dateStr = currentDateStr;
+            const snapMode = !!activeSnapshotId;
+            if (snapMode) {
+                // Modalità snapshot: nessun download. Un pannello non incluso mostra solo un avviso.
+                if (!snapshotHas(sectionId)) { markSectionNotInSnapshot(sectionId); return; }
+                clearSectionNotice(sectionId);
+                if (SNAP_IFRAME_HOSTS.includes(sectionId)) {
+                    applySnapshotIframes(sectionId, snapSection(sectionId));
+                    return;
+                }
+            }
             switch (sectionId) {
                 case 'sectionCommerciali':
-                    fetchNearestMunicipality(lat, lon).then(cityName => {
-                        if (cityName) updateCityIframes(cityName);
-                    });
+                    if (snapMode) {
+                        const cn = snapSection('sectionCommerciali').cityName;
+                        if (cn) updateCityIframes(cn);   // solo per i link: gli iframe diventano segnaposto
+                    } else {
+                        fetchNearestMunicipality(lat, lon).then(cityName => {
+                            if (cityName) updateCityIframes(cityName);
+                        });
+                    }
                     break;
                 case 'sectionOpenMeteo':
                     fetchOpenMeteo(lat, lon, dateStr);
@@ -841,7 +895,11 @@
                     updateCoordinateIframes(lat, lon); // Windy usa la stessa funzione
                     break;
                 case 'sectionSatellites':
-                    // Nessun auto-load: l'utente sceglie la categoria col bottone
+                    // Live: nessun auto-load, l'utente sceglie la categoria. Snapshot: riapre l'ultima categoria salvata.
+                    if (snapMode) {
+                        const sec = snapSection('sectionSatellites');
+                        if (sec && sec.group) loadSatelliteGroup(sec.group);
+                    }
                     break;
                 case 'sectionLiveStations':
                     updateLiveStations(lat, lon);
@@ -861,6 +919,9 @@
                     handleSectionToggle(id);
                 }
             });
+            if (isSectionOpen('sectionSimulatore')) {
+                handleSimulatoreToggle();
+            }
         }
 
         // ==========================================
@@ -926,7 +987,7 @@
 
             const fraction = (moonIllum.fraction * 100).toFixed(0);
             const posNow = SunCalc.getMoonPosition(targetDate, lat, lon);
-            const distLuna = Math.round(posNow.distance); 
+            const distLuna = Math.round(posNow.distance);
 
             let albaLunaStr = "--:--", tramontoLunaStr = "--:--";
             let albaLunaDir = "", tramontoLunaDir = "";
@@ -947,9 +1008,9 @@
             if (moonTimes.rise && moonTimes.set) {
                 const tRise = moonTimes.rise.getTime();
                 let tSet = moonTimes.set.getTime();
-                if (tSet < tRise) tSet += 86400000; 
+                if (tSet < tRise) tSet += 86400000;
                 const transitTime = new Date(tRise + (tSet - tRise) / 2);
-                
+
                 culmineStr = formatTime(transitTime);
                 const posTransit = SunCalc.getMoonPosition(transitTime, lat, lon);
                 culmineAlt = Math.round(posTransit.altitude * 180 / Math.PI);
@@ -961,7 +1022,7 @@
                 <div class="mb-6 pt-2">
                     <h3 class="font-bold text-white mb-3 flex items-center gap-2"><span class="text-xl">☀️</span>Sole</h3>
                     <div class="grid grid-cols-2 gap-4 text-[11px] text-slate-300">
-                        
+
                         <div class="bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
                             <h4 class="font-bold text-amber-400 mb-2 border-b border-slate-600/50 pb-1 flex items-center gap-1">🌅 Alba</h4>
                             <ul class="space-y-1.5">
@@ -985,9 +1046,9 @@
                                 <li class="flex justify-between"><span>🔭 Astro (-18°)</span> <span>${formatTime(sunTimes.night)}</span></li>
                             </ul>
                         </div>
-                    </div> 
+                    </div>
                     <!-- -->
-                    
+
                     <div class="mt-4 bg-slate-700/70 rounded-lg p-3 flex justify-between items-center text-[15px] text-slate-200 shadow-inner">
                         <span>🔆 Zenith: <strong class="text-white">${formatTime(sunTimes.solarNoon)}</strong> <span class="text-[11px] text-slate-400">(Elev: ${elevZenith !== null ? elevZenith + '°' : '--'}, Azimut: ${azZenith !== null ? azZenith + '° ' + getCompassDir(azZenith) : '--'})</span></span>
                         <span>⏱️ Luce: <strong class="text-white">${luceString}</strong></span>
@@ -998,7 +1059,7 @@
                 <div class="border-t border-slate-700 pt-5">
                     <h3 class="font-bold text-white mb-3 flex items-center gap-2"><span class="text-xl">🌙</span> Luna</h3>
                     <div class="text-[15px] text-slate-300 space-y-3">
-                        
+
                         <div class="flex items-center space-x-3 bg-slate-700/40 p-3 rounded-lg border border-slate-600/50">
                             <span class="text-3xl">${lunaIcona}</span>
                             <span class="font-semibold text-white">${lunaFaseTesto} <span class="font-normal text-slate-400">&middot; ${fraction}% illuminata</span></span>
@@ -1007,7 +1068,7 @@
                             <span class="text-2xl pl-1">📏</span>
                             <span>Distanza stimata: <strong class="text-white">${distLuna.toLocaleString('it-IT')} km</strong></span>
                         </div>
-                        
+
                         <div class="grid grid-cols-3 gap-2 mt-4 bg-slate-700/70 p-4 rounded-lg text-center shadow-inner">
                             <div>
                                 <div class="text-[12px] text-slate-400 font-medium">🌙 Alba luna</div>
@@ -1025,7 +1086,7 @@
                                 <div class="text-[12px] text-slate-300">&rarr; ${tramontoLunaDir}</div>
                             </div>
                         </div>
-                        
+
                     </div>
                 </div>
             `;
@@ -1073,16 +1134,8 @@
                 // TRUCCO CDN + SINTASSI CORRETTA: Chiediamo 16 giorni standard + 1 passato.
                 // Usiamo l'esatta nomenclatura (weathercode, windspeed) accettata dal server
                 // URL AGGIORNATO: Chiede anche apparent_temperature, weathercode, precipitation, windspeed_10m e winddirection_10m per ogni ora
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,windspeed_10m_max,windgusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m,apparent_temperature,weathercode,precipitation,windspeed_10m,winddirection_10m&timezone=Europe%2FRome&forecast_days=16&past_days=1`;                
-                const response = await fetch(url);
-                
-                // Ora il codice non si limita a fallire, ma ci dice il motivo esatto se Open-Meteo si arrabbia
-                if (!response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    throw new Error(`Errore Server API: ${response.status} - ${errData.reason || 'Parametro non valido'}`);
-                }
-                
-                const data = await response.json();
+                // Rete se disponibile, altrimenti lo snapshot 24h della stessa località
+                const { data } = await getOpenMeteoData(lat, lon);
 
                 // Cerchiamo la data selezionata nel pacchetto scaricato
                 const dIdx = data.daily.time.indexOf(dateStr);
@@ -1090,7 +1143,7 @@
                     throw new Error("La data selezionata è fuori dalla copertura (max 16 giorni).");
                 }
 
-                const elevation = data.elevation; 
+                const elevation = data.elevation;
                 // Estraiamo i dati con la sintassi corretta!
                 const codeWmo = data.daily.weathercode[dIdx];
                 const minT = data.daily.temperature_2m_min[dIdx];
@@ -1100,7 +1153,7 @@
                 const windMax = data.daily.windspeed_10m_max[dIdx];
                 const windGusts = data.daily.windgusts_10m_max[dIdx];
                 const windDirDeg = data.daily.wind_direction_10m_dominant[dIdx];
-                const probRain = data.daily.precipitation_probability_max[dIdx] ?? '--'; 
+                const probRain = data.daily.precipitation_probability_max[dIdx] ?? '--';
                 const uvIndex = data.daily.uv_index_max[dIdx] ?? 0;
 
                 // Estrazione oraria intelligente focalizzata solo sul giorno scelto
@@ -1133,7 +1186,7 @@
                 if (hStart !== -1) {
                     for (let i = 0; i < 24; i++) {
                         const hIdx = hStart + i; // Indice esatto nell'array orario
-                        const timeHour = data.hourly.time[hIdx].substring(11, 16); 
+                        const timeHour = data.hourly.time[hIdx].substring(11, 16);
                         const tempH = Math.round(data.hourly.temperature_2m[hIdx]);
                         const appTempH = Math.round(data.hourly.apparent_temperature[hIdx]);
                         const codeH = data.hourly.weathercode[hIdx];
@@ -1141,7 +1194,7 @@
                         const windSpdH = Math.round(data.hourly.windspeed_10m[hIdx]);
                         const windDirH = data.hourly.winddirection_10m[hIdx];
                         const humH = data.hourly.relative_humidity_2m[hIdx];
-                        
+
                         // Traducono i codici in testo/icone usando le funzioni già esistenti
                         const wmoH = getWmoDetails(codeH);
                         const dirH = getCompassDir(windDirH);
@@ -1151,12 +1204,12 @@
                                 <span class="text-sm font-bold text-slate-300 border-b border-slate-600 pb-1 mb-2 w-full text-center">${timeHour}</span>
                                 <span class="text-2xl drop-shadow" title="${wmoH.text}">${wmoH.icon}</span>
                                 <span class="text-[12px] text-slate-300 mt-1 truncate w-full text-center" title="${wmoH.text}">${wmoH.text}</span>
-                                
+
                                 <div class="mt-2 text-center">
                                     <span class="font-bold text-white text-base">${tempH}°</span>
                                     <span class="text-[13px] text-slate-400 block">Percep. ${appTempH}°</span>
                                 </div>
-                                
+
                                 <div class="mt-2 pt-2 border-t border-slate-600/50 w-full text-center space-y-1">
                                     <div class="text-[13px] text-blue-300">💧 ${precipH} mm</div>
                                     <div class="text-[13px] text-slate-300">💨 ${windSpdH} <span class="text-[10px]">km/h</span> ${dirH}</div>
@@ -1172,9 +1225,9 @@
                     <div class="mb-4 text-sm text-slate-400 border-b border-slate-600 pb-4 text-center">
                         📍 Calcolato per <strong class="text-white">${formattedDate}</strong> &middot; (${lat.toFixed(5)}, ${lon.toFixed(5)})<br>
                         ⛰️ Altitudine: <strong class="text-white">${elevation} m s.l.m.</strong>
-                        
+
                         <div class="mt-4 flex justify-center items-center space-x-3">
-                            <span class="text-4xl drop-shadow-md">${wmoInfo.icon}</span> 
+                            <span class="text-4xl drop-shadow-md">${wmoInfo.icon}</span>
                             <span class="text-2xl text-white font-bold tracking-wide">${wmoInfo.text}</span>
                         </div>
                     </div>
@@ -1241,7 +1294,7 @@
                 document.getElementById('openMeteoData').innerHTML = `<p class="text-red-400 font-semibold text-center mt-4">⚠️ Connessione a Open-Meteo fallita.<br><span class="text-xs text-slate-400 font-normal">${error.message}</span></p>`;
             }
         }
-        
+
         async function fetchNearestMunicipality(lat, lon) {
             const label = document.getElementById('detectedCityLabel');
 
@@ -1255,22 +1308,23 @@
                         'Accept-Language': 'it'
                     }
                 });
-                
+
                 if (!response.ok) throw new Error("Errore HTTP");
-                
+
                 const data = await response.json();
 
                 if (data && data.address) {
                     const cityName = data.address.city || data.address.town || data.address.village || data.address.municipality || data.name;
                     const regionName = data.address.state || "Italia";
-                    
+
                     if (cityName) {
-                        label.innerHTML = `Comune rilevato: <strong>${cityName}</strong> (${regionName})`;
+                        lastMunicipality = { lat, lon, cityName, regionName };
+                        label.innerHTML = `Comune rilevato: <strong>${esc(cityName)}</strong> (${esc(regionName)})`;
                         label.className = "text-sm px-3 py-1 bg-emerald-900 text-emerald-200 rounded-full border border-emerald-700 shadow-inner";
                         return cityName;
                     }
                 }
-                
+
                 if (data && data.address && data.address.country) {
                      label.innerHTML = `Nessun comune esatto (Area: ${data.address.country})`;
                      label.className = "text-sm px-3 py-1 bg-yellow-900 text-yellow-200 rounded-full border border-yellow-700 shadow-inner";
@@ -1280,10 +1334,11 @@
                 label.innerHTML = `Coordinate fuori copertura terrestre.`;
                 label.className = "text-sm px-3 py-1 bg-yellow-900 text-yellow-200 rounded-full border border-yellow-700 shadow-inner";
                 return null;
-                
+
             } catch (error) {
                 console.error("Errore Nominatim:", error);
-                label.innerHTML = `Errore di Rete: Connessione a OpenStreetMap fallita.`;
+                const hint = offlineHint(lat, lon);
+                label.innerHTML = `Errore di Rete: Connessione a OpenStreetMap fallita.${hint ? ' ' + esc(hint) : ''}`;
                 label.className = "text-sm px-3 py-1 bg-red-900 text-red-200 rounded-full border border-red-700 shadow-inner";
                 return null;
             }
@@ -1295,34 +1350,34 @@
             document.getElementById('windyIframe').src = `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=°C&metricWind=km/h&zoom=10&overlay=wind&product=ecmwf&level=surface&lat=${lat}&lon=${lon}`;
             document.getElementById('linkWindy').href = windyUrl;
             document.getElementById('linkWindy').innerText = windyUrl;
-            
+
             const latDir = lat >= 0 ? 'N' : 'S';
             const lonDir = lon >= 0 ? 'E' : 'W';
             const latAbs = Math.abs(lat).toFixed(3);
             const lonAbs = Math.abs(lon).toFixed(3);
             const meteoblueSlug = `${latAbs}${latDir}${lonAbs}${lonDir}`;
 
-            
+
             const mbDirectLink = `https://www.meteoblue.com/it/tempo/settimana/${meteoblueSlug}`;
             const mbMapLink = `https://www.meteoblue.com/it/tempo/mappe/${meteoblueSlug}`;
-            
-            
+
+
             document.getElementById('linkMeteogram').href = mbDirectLink;
             document.getElementById('linkMeteogram').innerText = mbDirectLink;
-            
+
             document.getElementById('linkSeeing').href = mbDirectLink;
             document.getElementById('linkSeeing').innerText = mbDirectLink;
-            
+
             document.getElementById('linkMap').href = mbMapLink;
             document.getElementById('linkMap').innerText = mbMapLink;
 
             // METEOBLUE IFRAMES
-            
+
             // 1. Meteogramma (Dinamico per coordinate, endpoint pubblico senza firme, layout bright)
             document.getElementById('meteoblueMeteogramIframe').src = `https://www.meteoblue.com/it/tempo/widget/three?geoloc=fixed&lat=${lat}&lon=${lon}&tz=Europe%2FRome&days=4&tempresolution=1&windresolution=1&waterresolution=1&format=h&winddirection=0&layout=bright&autowidth=auto`;
             // 2. Seeing
             document.getElementById('meteoblueSeeingIframe').src = `https://www.meteoblue.com/it/tempo/widget/seeing/${meteoblueSlug}?geoloc=fixed`;
-            
+
             // 3. Mappa
             document.getElementById('meteoblueMapIframe').src = `https://www.meteoblue.com/it/tempo/mappe/widget/${meteoblueSlug}?windAnimation=1&gust=1&satellite=1&cloudsAndPrecipitation=1&temperature=1&sunshine=1&extremeForecastIndex=1&geoloc=fixed&tempunit=C&lengthunit=metric&windunit=km%252Fh&zoom=8&autowidth=auto`;
         }
@@ -1354,7 +1409,7 @@
         }
 
 
-        
+
 
 
        // ==========================================
@@ -1408,30 +1463,25 @@ async function loadSatelliteGroup(group) {
     }
     const lat = currentLat, lon = currentLon;
 
-    statusEl.textContent = 'Scaricamento dati orbitali (TLE)...';
+    statusEl.textContent = activeSnapshotId ? 'Lettura dati orbitali dallo snapshot...' : 'Scaricamento dati orbitali (TLE)...';
     listEl.innerHTML = '';
 
     try {
-        let satrecs = satGroupCache[group];
+        let satrecs = activeSnapshotId ? null : satGroupCache[group];
+        let tleNote = '';
         if (!satrecs) {
-            const url = `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
-            const resp = await fetch(url);
-            if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
-            const text = await resp.text();
-            const lines = text.trim().split('\n').map(l => l.trim());
-
+            const { entries, snap: tleSnap } = await getTleEntries(group);
             satrecs = [];
-            const maxSats = (group === 'starlink') ? 30 : 60;
-            for (let i = 0; i < lines.length - 2 && satrecs.length < maxSats; i += 3) {
-                const name = lines[i];
-                const l1 = lines[i + 1], l2 = lines[i + 2];
-                if (!l1 || !l2 || !l1.startsWith('1 ') || !l2.startsWith('2 ')) continue;
+            for (const { name, l1, l2 } of entries) {
                 try {
-                    const satrec = satellite.twoline2satrec(l1, l2);
-                    satrecs.push({ name, satrec });
+                    satrecs.push({ name, satrec: satellite.twoline2satrec(l1, l2) });
                 } catch (e) { /* TLE malformato, salta */ }
             }
-            satGroupCache[group] = satrecs;
+            if (tleSnap) {
+                tleNote = ` · 📦 TLE da snapshot del ${new Date(tleSnap.createdAt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+            } else {
+                satGroupCache[group] = satrecs; // in cache solo i dati live
+            }
         }
 
         statusEl.textContent = `Calcolo passaggi per ${satrecs.length} satelliti (48h)...`;
@@ -1491,7 +1541,7 @@ async function loadSatelliteGroup(group) {
                         if (elevDeg > maxElev) { maxElev = elevDeg; maxElevTime = t; }
                         currentTrack.push({ az: azDeg, elev: elevDeg, time: t, mag, altitudeKm });
                     }
-                
+
                     } else if (!isVisible && wasVisible) {
                         const durationMin = Math.round((t - passStart) / 60000);
                         const closestToMaxElev = currentTrack.reduce((prev, curr) =>
@@ -1516,10 +1566,16 @@ async function loadSatelliteGroup(group) {
         statusEl.textContent = `${passes.length} passaggi visibili trovati (buio + elevazione min 10°).`;
 
         onTimeWindowChange();
+        if (tleNote) statusEl.textContent += tleNote;
 
     } catch (error) {
         console.error('Errore satelliti:', error);
-        statusEl.textContent = 'Errore nel recupero dati orbitali da CelesTrak.';
+        if (error && error.code === 'NOT_IN_SNAPSHOT') {
+            statusEl.textContent = 'Questa categoria non è inclusa nello snapshot.';
+        } else {
+            const hint = offlineHint(lat, lon);
+            statusEl.textContent = 'Errore nel recupero dati orbitali da CelesTrak.' + (hint ? ' ' + hint : '');
+        }
     }
 }
 
@@ -1628,7 +1684,7 @@ function renderPassesTable(passes) {
         <div class="flex flex-col gap-1 ${magInfo.bg} p-2 rounded-lg border border-slate-600/50 hover:bg-slate-700/70 transition cursor-pointer"
              onmouseenter="drawSkyRadar(lastFilteredPasses, ${idx})" onmouseleave="drawSkyRadar(lastFilteredPasses)">
             <div class="flex justify-between items-center">
-                <span class="font-semibold text-white flex items-center">${swatch}${p.name}</span>
+                <span class="font-semibold text-white flex items-center">${swatch}${esc(p.name)}</span>
                 <span class="text-[11px] text-slate-400">${dateLabel}</span>
                 <span class="text-slate-200 font-mono">${startTime} → ${endTime}</span>
             </div>
@@ -1679,7 +1735,7 @@ function renderPassesTable(passes) {
         let simOsmLayer, simSatLayer;
         let simOverlayGroup = null;
         let baseDateForSim = new Date();
-        
+
         // Cache per evitare di richiamare l'API ad ogni tocco dello slider
         let simCurrentElevation = '--';
         let simLastCoords = '';
@@ -1687,7 +1743,11 @@ function renderPassesTable(passes) {
         async function handleSimulatoreToggle() {
             const panel = document.getElementById('sectionSimulatore');
             if (!panel.open) return;
-            
+            if (activeSnapshotId) {
+                if (!snapshotHas('sectionSimulatore')) { markSectionNotInSnapshot('sectionSimulatore'); return; }
+                clearSectionNotice('sectionSimulatore');
+            }
+
             const lat = currentLat !== null ? currentLat : 38.1157;
             const lon = currentLon !== null ? currentLon : 13.3615;
 
@@ -1695,39 +1755,46 @@ function renderPassesTable(passes) {
             if (!simMap) {
                 initSimulatoreMap(lat, lon);
             } else {
-                simMap.invalidateSize(); 
+                simMap.invalidateSize();
             }
-            
-            // Scarica altitudine (solo se le coordinate sono cambiate)
-            const coordKey = `${lat},${lon}`;
-            if (simLastCoords !== coordKey) {
-                simLastCoords = coordKey;
-                document.getElementById('simAlt').textContent = "Alt: calcolo...";
-                try {
-                    const resp = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`);
-                    const data = await resp.json();
-                    simCurrentElevation = (data && data.elevation && data.elevation.length > 0) 
-                                          ? `${Math.round(data.elevation[0])} m s.l.m.` 
-                                          : "N/D";
-                } catch (e) {
-                    simCurrentElevation = "Errore";
+
+            const simSnap = activeSnapshotId ? snapSection('sectionSimulatore') : null;
+            if (simSnap) {
+                // Modalità snapshot: quota e stato della mappa arrivano dallo snapshot, nessun download
+                simCurrentElevation = simSnap.elevation || 'N/D';
+                applySimSnapshotState(simSnap);
+            } else {
+                // Scarica altitudine (solo se le coordinate sono cambiate)
+                const coordKey = `${lat},${lon}`;
+                if (simLastCoords !== coordKey) {
+                    simLastCoords = coordKey;
+                    document.getElementById('simAlt').textContent = "Alt: calcolo...";
+                    try {
+                        const resp = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`);
+                        const data = await resp.json();
+                        simCurrentElevation = (data && data.elevation && data.elevation.length > 0)
+                                              ? `${Math.round(data.elevation[0])} m s.l.m.`
+                                              : "N/D";
+                    } catch (e) {
+                        simCurrentElevation = "Errore";
+                    }
                 }
             }
-            
+
             // Imposta la data base prendendola dalla dashboard
             const mainDateStr = document.getElementById('dateInput').value;
             baseDateForSim = mainDateStr ? new Date(`${mainDateStr}T12:00:00`) : new Date();
-            
+
             // Calcola il Giorno dell'Anno (1-365) per allineare lo slider
             const startOfYear = new Date(baseDateForSim.getFullYear(), 0, 0);
             const diff = baseDateForSim - startOfYear;
             const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-            
+
             // Imposta gli slider
             document.getElementById('simDaySlider').value = dayOfYear;
             const now = new Date();
             document.getElementById('simTimeSlider').value = now.getHours() * 60 + now.getMinutes();
-            
+
             updateSimulatore();
         }
 
@@ -1737,15 +1804,9 @@ function renderPassesTable(passes) {
 
             // OpenStreetMap Ufficiale: Su Vercel funzionerà nativamente senza API Key!
             // (In locale potresti continuare a vedere pagina grigia o 403 finché non lo pubblichi)
-            simOsmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(simMap);
+            simOsmLayer = makeTileLayer('osm').addTo(simMap);
 
-            simSatLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                maxZoom: 19,
-                attribution: '© Esri'
-            });
+            simSatLayer = makeTileLayer('sat');
 
             simOverlayGroup = L.layerGroup().addTo(simMap);
         }
@@ -1753,7 +1814,7 @@ function renderPassesTable(passes) {
         function setSimLayer(layerType) {
             const btnOsm = document.getElementById('btnSimOsm');
             const btnSat = document.getElementById('btnSimSat');
-            
+
             if (layerType === 'osm') {
                 if (simMap.hasLayer(simSatLayer)) simMap.removeLayer(simSatLayer);
                 if (!simMap.hasLayer(simOsmLayer)) simMap.addLayer(simOsmLayer);
@@ -1785,7 +1846,7 @@ function renderPassesTable(passes) {
             const lat = currentLat !== null ? currentLat : 38.1157;
             const lon = currentLon !== null ? currentLon : 13.3615;
             const isSun = document.getElementById('simAstroSelect').value === 'sun';
-            
+
             // Aggiorna UI Coordinate
             document.getElementById('simCoords').textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
             document.getElementById('simAlt').textContent = `Alt: ${simCurrentElevation}`;
@@ -1793,7 +1854,7 @@ function renderPassesTable(passes) {
             // Calcolo data simulata dagli slider ASSOLUTI
             const dayOfYear = parseInt(document.getElementById('simDaySlider').value);
             const timeMinutes = parseInt(document.getElementById('simTimeSlider').value);
-            
+
             // Crea la data partendo da Gennaio dell'anno corrente e aggiungendo il Giorno dell'Anno dello slider
             const simDate = new Date(baseDateForSim.getFullYear(), 0, dayOfYear);
             simDate.setHours(Math.floor(timeMinutes / 60), timeMinutes % 60, 0);
@@ -1806,14 +1867,14 @@ function renderPassesTable(passes) {
             simOverlayGroup.clearLayers();
             simMap.setView([lat, lon], simMap.getZoom(), { animate: false });
 
-            const MAX_RADIUS = 1000; 
-            
+            const MAX_RADIUS = 1000;
+
             L.circle([lat, lon], { radius: MAX_RADIUS, color: '#1e293b', weight: 2, fillOpacity: 0, interactive: false }).addTo(simOverlayGroup);
             L.circleMarker([lat, lon], { radius: 5, color: '#fff', fillColor: '#3b82f6', fillOpacity: 1, weight: 2 }).addTo(simOverlayGroup);
 
             const getStandardAzimuth = (azRad) => (azRad * 180 / Math.PI + 180) % 360;
             const getCompDir = (deg) => ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO', 'N'][Math.round(deg / 45) % 8];
-            
+
             let riseTime, setTime, posNow, colorArc, colorAstro;
 
             if (isSun) {
@@ -1838,7 +1899,7 @@ function renderPassesTable(passes) {
             document.getElementById('simSet').textContent = setTime ? formatTime(setTime) : (isSun ? '--:--' : 'Non tramonta');
 
             let riseAzText = '--°', setAzText = '--°';
-            
+
             if (riseTime) {
                 const pos = isSun ? SunCalc.getPosition(riseTime, lat, lon) : SunCalc.getMoonPosition(riseTime, lat, lon);
                 const az = getStandardAzimuth(pos.azimuth);
@@ -1847,7 +1908,7 @@ function renderPassesTable(passes) {
                 const pt = computeDestinationPoint(lat, lon, MAX_RADIUS, az);
                 L.polyline([[lat, lon], pt], { color: '#3b82f6', weight: 2, dashArray: '4 4', interactive: false }).addTo(simOverlayGroup);
             }
-            
+
             if (setTime) {
                 const pos = isSun ? SunCalc.getPosition(setTime, lat, lon) : SunCalc.getMoonPosition(setTime, lat, lon);
                 const az = getStandardAzimuth(pos.azimuth);
@@ -1856,7 +1917,7 @@ function renderPassesTable(passes) {
                 const pt = computeDestinationPoint(lat, lon, MAX_RADIUS, az);
                 L.polyline([[lat, lon], pt], { color: '#ef4444', weight: 2, dashArray: '4 4', interactive: false }).addTo(simOverlayGroup);
             }
-            
+
             document.getElementById('simRiseAz').textContent = `Azimut: ${riseAzText}`;
             document.getElementById('simSetAz').textContent = `Azimut: ${setAzText}`;
 
@@ -1888,11 +1949,11 @@ function renderPassesTable(passes) {
             if (isSun && currentElevDeg > 0) {
                 const shadowRatio = 1 / Math.tan(posNow.altitude);
                 shadowText.textContent = `Lunghezza ombra (prop): 1:${shadowRatio.toFixed(2)}`;
-                
+
                 const shadowAzimuth = (currentAzDeg + 180) % 360;
                 let shadowLength = 100 * shadowRatio;
-                if (shadowLength > MAX_RADIUS * 1.5) shadowLength = MAX_RADIUS * 1.5; 
-                
+                if (shadowLength > MAX_RADIUS * 1.5) shadowLength = MAX_RADIUS * 1.5;
+
                 const shadowPt = computeDestinationPoint(lat, lon, shadowLength, shadowAzimuth);
                 L.polyline([[lat, lon], shadowPt], { color: '#111827', weight: 8, opacity: 0.5, interactive: false }).addTo(simOverlayGroup);
             } else {
@@ -2101,6 +2162,842 @@ function renderPassesTable(passes) {
             renderLunarCalendar(true); // aggiorna evidenziazione senza riaprire il dettaglio
         }
 
+
+
+        // ==========================================
+        // SNAPSHOT OFFLINE 24h (storage: snapshot.js, tile mappa: tilestore.js)
+        // Le risposte GET intercettate durante la cattura vengono archiviate per ID snapshot su Android.
+        // Consultazione = solo su richiesta dell'utente.
+        // ==========================================
+        const SNAP_DATA_SECTIONS = ['sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna', 'lunarCalendarPanel', 'sectionSimulatore', 'sectionSatellites'];
+        const SNAP_IFRAME_SECTIONS = ['sectionMeteoblue', 'sectionLightPollution', 'sectionAltriModelli', 'sectionLiveStations'];
+        const SNAP_ALL_SECTIONS = SNAP_DATA_SECTIONS.concat(SNAP_IFRAME_SECTIONS);
+        const SNAP_IFRAME_HOSTS = ['sectionCommerciali'].concat(SNAP_IFRAME_SECTIONS);   // sezioni che contengono iframe
+        const SNAP_LABELS = {
+            sectionCommerciali: 'Siti commerciali', sectionOpenMeteo: 'Open-Meteo', sectionSoleLuna: 'Sole e Luna',
+            lunarCalendarPanel: 'Calendario lunare', sectionSimulatore: 'Mappa solare/lunare', sectionSatellites: 'Satelliti',
+            sectionMeteoblue: 'Meteoblue', sectionLightPollution: 'Inquinamento luminoso', sectionAltriModelli: 'Altri modelli',
+            sectionLiveStations: 'Stazioni live'
+        };
+        const SIM_TILE_LAYERS = {
+            osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
+            sat: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri' }
+        };
+
+        let activeSnapshotId = null;   // se valorizzato, la pagina mostra SOLO i dati di quello snapshot (nessun download)
+        let snapshotBusy = false;
+        let snapshotFaultPoll = null;
+        let snapshotFaultCount = 0;
+        let lastOpenMeteo = null;      // { lat, lon, data }: ultimo download live di Open-Meteo
+        let lastMunicipality = null;   // { lat, lon, cityName, regionName }: ultimo comune rilevato (Nominatim)
+        const tleRawCache = {};        // categoria -> [{name,l1,l2}]: TLE già scaricati (solo dati live)
+
+        // ---- tile store (IndexedDB) e hook di cancellazione ----
+        let tileStoreInstance = null;
+        function getTileStore() {
+            if (!tileStoreInstance) {
+                const backend = (typeof indexedDB !== 'undefined') ? SkyTiles.idbBackend() : SkyTiles.memoryBackend();
+                tileStoreInstance = SkyTiles.create(backend);
+            }
+            return tileStoreInstance;
+        }
+        // Quando uno snapshot sparisce (scadenza, elimina, sostituzione) spariscono anche le sue tile.
+        window.SkySnapshot = SkySnapshot.create({
+            onRemove: (s) => {
+                getTileStore().removeSnapshot(s.id).catch(error => console.warn('Rimozione tile snapshot fallita:', error));
+                if (isNativeApp && offlineWebCache && window.Capacitor.isPluginAvailable('OfflineWebCache')) {
+                    offlineWebCache.clearSnapshot({ snapshotId: s.id })
+                        .catch(error => console.warn('Rimozione archivio web snapshot fallita:', error));
+                }
+            }
+        });
+
+        // ---- utilità ----
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function fetchWithTimeout(url, ms = 15000, options = {}) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), ms);
+            return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+        }
+
+        function isNetworkError(err) {
+            return err instanceof TypeError || (err && err.name === 'AbortError');
+        }
+
+        function sameCoords(o, lat, lon) {
+            return !!o && Number(o.lat).toFixed(5) === Number(lat).toFixed(5) && Number(o.lon).toFixed(5) === Number(lon).toFixed(5);
+        }
+
+        function setSnapshotStatus(msg) {
+            const el = document.getElementById('snapshotStatus');
+            if (el) el.textContent = msg;
+        }
+
+        async function setSnapshotWebCacheMode(enabled, snapshot) {
+            if (!isNativeApp) return;
+            if (!offlineWebCache || !window.Capacitor.isPluginAvailable('OfflineWebCache')) {
+                throw new Error('Plugin cache WebView non disponibile. Ricompila e sincronizza l’app Android.');
+            }
+            await offlineWebCache.setSnapshotMode({
+                enabled,
+                snapshotId: snapshot ? snapshot.id : undefined,
+                urls: snapshot ? snapshotFrameUrls(snapshot.sections) : [],
+                archiveEnabled: !!(snapshot && snapshot.webArchive)
+            });
+        }
+
+        function snapshotFrameUrls(sections) {
+            return Object.values(sections || {}).flatMap(section =>
+                Array.isArray(section && section.frames)
+                    ? section.frames.map(frame => frame && frame.src).filter(src => typeof src === 'string')
+                    : []);
+        }
+
+        function snapshotFrameElements(sections) {
+            const result = [];
+            SNAP_IFRAME_HOSTS.forEach(sectionId => {
+                const sectionData = sections && sections[sectionId];
+                const section = document.getElementById(sectionId);
+                if (!section || !sectionData || !Array.isArray(sectionData.frames)) return;
+                sectionData.frames.forEach(saved => {
+                    const frame = section.querySelectorAll('iframe')[saved.index];
+                    if (frame && saved.src) result.push({ frame, src: saved.src });
+                });
+            });
+            return result;
+        }
+
+        async function captureSnapshotWebArchive(snapshotId, sections) {
+            if (!isNativeApp || !offlineWebCache || !snapshotFrameUrls(sections).length) {
+                return { capturedResources: 0, faults: [], unavailable: true };
+            }
+            if (navigator.onLine === false) {
+                return { capturedResources: 0, faults: [], unavailable: true, offline: true };
+            }
+            if (!window.Capacitor.isPluginAvailable('OfflineWebCache')) {
+                return { capturedResources: 0, faults: [], unavailable: true };
+            }
+            const urls = snapshotFrameUrls(sections);
+            await offlineWebCache.beginSnapshotCapture({ snapshotId, urls });
+            try {
+                const timedOut = [];
+                const reloads = snapshotFrameElements(sections).map(({ frame, src }) => new Promise(resolve => {
+                    let finished = false;
+                    const finish = (timeout) => {
+                        if (finished) return;
+                        finished = true;
+                        clearTimeout(timer);
+                        frame.removeEventListener('load', onLoad);
+                        if (timeout) timedOut.push(src);
+                        resolve();
+                    };
+                    const onLoad = () => {
+                        if (frame.getAttribute('src') !== 'about:blank') finish(false);
+                    };
+                    const timer = setTimeout(() => finish(true), 18000);
+                    frame.addEventListener('load', onLoad);
+                    frame.setAttribute('src', 'about:blank');
+                    setTimeout(() => frame.setAttribute('src', src), 80);
+                }));
+                await Promise.all(reloads);
+                const response = await offlineWebCache.finishSnapshotCapture();
+                const report = response && response.result ? response.result : {};
+                report.timedOutFrames = timedOut.length;
+                return report;
+            } catch (error) {
+                try { await offlineWebCache.finishSnapshotCapture(); }
+                catch (cleanupError) { console.error('Chiusura cattura web fallita:', cleanupError); }
+                throw error;
+            }
+        }
+
+        async function clearSnapshotWebCache() {
+            if (!isNativeApp) return;
+            if (!offlineWebCache || !window.Capacitor.isPluginAvailable('OfflineWebCache')) {
+                throw new Error('Plugin cache WebView non disponibile.');
+            }
+            await offlineWebCache.clearCache();
+        }
+
+        // Suggerimento (non un fallback!): se manca la rete e c'è uno snapshot valido vicino, lo diciamo.
+        function offlineHint(lat, lon) {
+            if (activeSnapshotId || lat == null || lon == null) return '';
+            return SkySnapshot.findNear(lat, lon)
+                ? 'Hai uno snapshot valido per questa località: usa «Consulta lo snapshot offline» nel Pannello di Controllo.'
+                : '';
+        }
+
+        function snapSection(id) {
+            const s = activeSnapshotId ? SkySnapshot.get(activeSnapshotId) : null;
+            return (s && s.sections && s.sections[id]) || null;
+        }
+        function snapshotHas(id) { return !!snapSection(id); }
+
+        // ---- Open-Meteo ----
+        function buildOpenMeteoUrl(lat, lon) {
+            return `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,windspeed_10m_max,windgusts_10m_max,wind_direction_10m_dominant,precipitation_probability_max,uv_index_max&hourly=relative_humidity_2m,surface_pressure,temperature_2m,apparent_temperature,weathercode,precipitation,windspeed_10m,winddirection_10m&timezone=Europe%2FRome&forecast_days=16&past_days=1`;
+        }
+
+        async function fetchOpenMeteoNetwork(lat, lon) {
+            const response = await fetchWithTimeout(buildOpenMeteoUrl(lat, lon), 15000);
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(`Errore Server API: ${response.status} - ${errData.reason || 'Parametro non valido'}`);
+            }
+            return response.json();
+        }
+
+        // Modalità snapshot: legge SOLO dallo snapshot. Modalità live: rete, e memorizza l'ultimo risultato per la cattura.
+        async function getOpenMeteoData(lat, lon) {
+            if (activeSnapshotId) {
+                const sec = snapSection('sectionOpenMeteo');
+                if (sec && sec.data) return { data: sec.data, live: false };
+                throw new Error('Open-Meteo non è incluso in questo snapshot.');
+            }
+            try {
+                const data = await fetchOpenMeteoNetwork(lat, lon);
+                lastOpenMeteo = { lat, lon, data };
+                return { data, live: true };
+            } catch (err) {
+                if (isNetworkError(err)) {
+                    const hint = offlineHint(lat, lon);
+                    throw new Error('Rete non raggiungibile.' + (hint ? ' ' + hint : ''));
+                }
+                throw err;
+            }
+        }
+
+        // ---- TLE satelliti ----
+        function parseTleText(text, group) {
+            const lines = text.trim().split('\n').map(l => l.trim());
+            const maxSats = (group === 'starlink') ? 30 : 60;
+            const out = [];
+            for (let i = 0; i < lines.length - 2 && out.length < maxSats; i += 3) {
+                const name = lines[i], l1 = lines[i + 1], l2 = lines[i + 2];
+                if (!l1 || !l2 || !l1.startsWith('1 ') || !l2.startsWith('2 ')) continue;
+                out.push({ name, l1, l2 });
+            }
+            return out;
+        }
+
+        async function fetchTleNetwork(group) {
+            const resp = await fetchWithTimeout(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`, 25000);
+            if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
+            const entries = parseTleText(await resp.text(), group);
+            if (!entries.length) throw new Error('Nessun TLE valido ricevuto');
+            return entries;
+        }
+
+        // Ritorna { entries, snap }: snap è valorizzato solo se i dati arrivano dallo snapshot.
+        async function getTleEntries(group) {
+            if (activeSnapshotId) {
+                const sec = snapSection('sectionSatellites');
+                if (sec && sec.tle && Array.isArray(sec.tle[group]) && sec.tle[group].length) {
+                    return { entries: sec.tle[group], snap: SkySnapshot.get(activeSnapshotId) };
+                }
+                const e = new Error('Categoria non inclusa nello snapshot');
+                e.code = 'NOT_IN_SNAPSHOT';
+                throw e;
+            }
+            const entries = await fetchTleNetwork(group);
+            tleRawCache[group] = entries;
+            return { entries, snap: null };
+        }
+
+        // ---- Reverse geocoding "silenzioso" (non tocca l'etichetta della pagina) ----
+        async function reverseGeocodeSilent(lat, lon) {
+            try {
+                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10`;
+                const response = await fetchWithTimeout(url, 10000, { headers: { 'Accept-Language': 'it' } });
+                if (!response.ok) return null;
+                const data = await response.json();
+                const a = (data && data.address) || {};
+                const cityName = a.city || a.town || a.village || a.municipality || data.name || null;
+                return cityName ? { cityName, regionName: a.state || null } : null;
+            } catch (e) {
+                return null; // facoltativo: lo snapshot si salva comunque (con le coordinate al posto del nome)
+            }
+        }
+
+        // ---- Tile della mappa: layer Leaflet che in modalità snapshot legge da IndexedDB ----
+        let CachedTileLayer = null;
+        function makeTileLayer(layerKey) {
+            if (!CachedTileLayer) {
+                CachedTileLayer = L.TileLayer.extend({
+                    createTile: function (coords, done) {
+                        if (!activeSnapshotId) return L.TileLayer.prototype.createTile.call(this, coords, done);
+                        const tile = document.createElement('img');
+                        tile.alt = '';
+                        getTileStore().get(activeSnapshotId, this.options.layerKey, coords.z, coords.x, coords.y).then(blob => {
+                            if (!blob) { done(null, tile); return; }     // tile non salvata: resta vuota
+                            const u = URL.createObjectURL(blob);
+                            const fin = () => { URL.revokeObjectURL(u); done(null, tile); };
+                            tile.onload = fin;
+                            tile.onerror = fin;
+                            tile.src = u;
+                        }).catch(() => done(null, tile));
+                        return tile;
+                    }
+                });
+            }
+            const cfg = SIM_TILE_LAYERS[layerKey];
+            return new CachedTileLayer(cfg.url, { layerKey, maxZoom: 19, attribution: cfg.attribution });
+        }
+
+        async function captureTiles(snapId, layerKey, say) {
+            const b = simMap.getBounds();
+            const zoom = Math.round(simMap.getZoom());
+            const plan = SkyTiles.planTiles(
+                { north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() },
+                zoom, { budget: SkyTiles.MAX_TILES, minZoom: 0, maxZoom: 19 });
+            const store = getTileStore();
+            const template = SIM_TILE_LAYERS[layerKey].url;
+            let next = 0, saved = 0, failed = 0;
+            async function worker() {
+                while (next < plan.tiles.length) {
+                    const t = plan.tiles[next++];
+                    try {
+                        const resp = await fetchWithTimeout(SkyTiles.tileUrl(template, t), 10000, { mode: 'cors' });
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                        const blob = await resp.blob();
+                        if (!blob.size) throw new Error('tile vuota');
+                        await store.put(snapId, layerKey, t.z, t.x, t.y, blob);
+                        saved++;
+                    } catch (e) { failed++; }
+                    if ((saved + failed) % 10 === 0) say(`Scarico le tile della mappa (${saved + failed}/${plan.tiles.length})…`);
+                }
+            }
+            await Promise.all(Array.from({ length: 6 }, worker));
+            return { layer: layerKey, levels: plan.levels, saved, failed, total: plan.tiles.length };
+        }
+
+        // ---- Cattura: legge SOLO ciò che è già in memoria, senza scaricare nulla (tranne le tile della mappa) ----
+        function collectSnapshotData() {
+            const lat = currentLat, lon = currentLon;
+            const sections = {};
+            const skipped = [];
+            const open = (id) => isSectionOpen(id);
+
+            if (open('sectionCommerciali')) {
+                const m = sameCoords(lastMunicipality, lat, lon) ? lastMunicipality : null;
+                sections.sectionCommerciali = { cityName: m ? m.cityName : null, regionName: m ? m.regionName : null };
+            }
+            if (open('sectionOpenMeteo')) {
+                if (sameCoords(lastOpenMeteo, lat, lon) && lastOpenMeteo.data) sections.sectionOpenMeteo = { data: lastOpenMeteo.data };
+                else skipped.push('Open-Meteo (nessun dato caricato)');
+            }
+            if (open('sectionSoleLuna')) sections.sectionSoleLuna = {};         // calcolo locale da coordinate + data
+            if (open('lunarCalendarPanel')) sections.lunarCalendarPanel = {};   // idem
+            if (open('sectionSimulatore') && simMap) {
+                const c = simMap.getCenter();
+                sections.sectionSimulatore = {
+                    elevation: /m s\.l\.m\./.test(simCurrentElevation) ? simCurrentElevation : null,
+                    view: { lat: c.lat, lon: c.lng, zoom: Math.round(simMap.getZoom()) },
+                    layer: (simSatLayer && simMap.hasLayer(simSatLayer)) ? 'sat' : 'osm'
+                };
+            }
+            if (open('sectionSatellites')) {
+                const groups = Object.keys(tleRawCache);
+                if (groups.length) {
+                    const tle = {};
+                    groups.forEach(g => { tle[g] = tleRawCache[g]; });
+                    sections.sectionSatellites = { group: (currentGroup && tle[currentGroup]) ? currentGroup : groups[0], tle };
+                } else {
+                    skipped.push('Satelliti (nessuna categoria caricata)');
+                }
+            }
+            SNAP_IFRAME_HOSTS.forEach(id => {
+                if (!open(id)) return;
+                const section = sections[id] || {};
+                section.frames = collectSnapshotIframes(id);
+                sections[id] = section;
+            });
+
+            const cm = sections.sectionCommerciali;
+            return {
+                lat, lon, dateStr: currentDateStr, sections, skipped,
+                cityName: cm ? cm.cityName : (sameCoords(lastMunicipality, lat, lon) ? lastMunicipality.cityName : null),
+                regionName: cm ? cm.regionName : (sameCoords(lastMunicipality, lat, lon) ? lastMunicipality.regionName : null)
+            };
+        }
+
+        function collectSnapshotIframes(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (!section) return [];
+            return Array.from(section.querySelectorAll('iframe')).map((frame, index) => {
+                const rawUrl = frame.getAttribute('src');
+                if (!rawUrl || rawUrl === 'about:blank') return null;
+                try {
+                    const url = new URL(rawUrl, document.baseURI);
+                    if (!['http:', 'https:'].includes(url.protocol)) return null;
+                    return { index, src: url.href };
+                } catch (error) {
+                    return null;
+                }
+            }).filter(Boolean);
+        }
+
+        function setSnapshotBusy(on) {
+            snapshotBusy = on;
+            const b = document.getElementById('snapshotBtn');
+            if (b) b.disabled = on;
+        }
+
+        async function takeSnapshot24h() {
+            if (snapshotBusy) return;
+            if (activeSnapshotId) {
+                setSnapshotStatus('ℹ️ Stai consultando uno snapshot: esci dallo snapshot prima di catturarne uno nuovo.');
+                return;
+            }
+            if (currentLat === null || currentLon === null) {
+                setSnapshotStatus('⚠️ Imposta le coordinate, premi "Aggiorna" e apri i pannelli che ti servono.');
+                return;
+            }
+            SkySnapshot.purge();
+            const c = collectSnapshotData();
+            if (!Object.keys(c.sections).length) {
+                setSnapshotStatus('⚠️ Nessun pannello aperto con dati da salvare: apri quelli che ti servono e riprova.');
+                return;
+            }
+            if (SkySnapshot.isFull()) {
+                const old = SkySnapshot.oldest();
+                if (!confirm(`Hai già ${SkySnapshot.MAX_SNAPSHOTS} snapshot. Sostituire il più vecchio [${SkySnapshot.labelFor(old)}]?`)) {
+                    setSnapshotStatus('Cattura annullata.');
+                    return;
+                }
+            }
+
+            setSnapshotBusy(true);
+            const id = SkySnapshot.newId();
+            const notes = c.skipped.slice();
+            let webArchiveSummary = null;
+            try {
+                let cityName = c.cityName, regionName = c.regionName;
+                if (!cityName && navigator.onLine !== false) {
+                    setSnapshotStatus('Rilevo il comune…');
+                    const place = await reverseGeocodeSilent(c.lat, c.lon);
+                    if (place) { cityName = place.cityName; regionName = place.regionName; }
+                }
+
+                const sim = c.sections.sectionSimulatore;
+                if (sim) {
+                    if (navigator.onLine === false) {
+                        sim.tiles = { layer: sim.layer, levels: [], saved: 0, failed: 0, total: 0 };
+                        notes.push('mappa senza tile (sei offline)');
+                    } else {
+                        setSnapshotStatus('Scarico le tile della mappa…');
+                        sim.tiles = await captureTiles(id, sim.layer, setSnapshotStatus);
+                        if (!sim.tiles.saved) notes.push('mappa senza tile');
+                        else if (sim.tiles.failed) notes.push(`${sim.tiles.failed} tile non scaricate`);
+                    }
+                }
+
+                if (snapshotFrameUrls(c.sections).length) {
+                    setSnapshotStatus('Archivio le pagine web aperte (cattura parziale)…');
+                    try {
+                        const webReport = await captureSnapshotWebArchive(id, c.sections);
+                        if (webReport.offline) notes.push('archivio iframe non catturato: dispositivo offline');
+                        else if (webReport.unavailable) notes.push('archivio iframe non disponibile su questa piattaforma');
+                        else {
+                            webArchiveSummary = {
+                                capturedResources: webReport.capturedResources || 0,
+                                capturedBytes: webReport.capturedBytes || 0,
+                                faults: (webReport.faults || []).length,
+                                timedOutFrames: webReport.timedOutFrames || 0
+                            };
+                            if (!webReport.capturedResources) notes.push('nessuna risorsa iframe archiviata');
+                            if (webReport.faults && webReport.faults.length) {
+                                notes.push(`${webReport.faults.length} risorse web non archiviate`);
+                            }
+                            if (webReport.timedOutFrames) notes.push(`${webReport.timedOutFrames} iframe non completati entro 18 secondi`);
+                        }
+                    } catch (webError) {
+                        console.error('Errore archivio web snapshot:', webError);
+                        notes.push('archivio web non completato: ' + webError.message);
+                    }
+                }
+
+                if (SkySnapshot.isFull()) SkySnapshot.removeOldest();   // già confermato dall'utente
+                const saved = SkySnapshot.save({
+                    id, lat: c.lat, lon: c.lon, dateStr: c.dateStr, cityName, regionName,
+                    sections: c.sections,
+                    webArchive: snapshotFrameUrls(c.sections).length
+                        ? (webArchiveSummary || { capturedResources: 0, capturedBytes: 0, faults: 0, timedOutFrames: 0, captureFailed: true })
+                        : null
+                });
+
+                const names = Object.keys(saved.sections).map(k => SNAP_LABELS[k]).join(', ');
+                const tileTxt = (sim && sim.tiles && sim.tiles.saved) ? ` (+${sim.tiles.saved} tile)` : '';
+                setSnapshotStatus(`✅ Snapshot [${SkySnapshot.labelFor(saved)}] salvato, valido fino a ${SkySnapshot.shortStamp(saved.expiresAt)}. Pannelli: ${names}${tileTxt}.`
+                    + (notes.length ? ` Note: ${notes.join('; ')}.` : ''));
+            } catch (err) {
+                console.error('Errore snapshot:', err);
+                getTileStore().removeSnapshot(id).catch(() => {});   // niente tile orfane
+                if (isNativeApp && offlineWebCache && window.Capacitor.isPluginAvailable('OfflineWebCache')) {
+                    offlineWebCache.clearSnapshot({ snapshotId: id })
+                        .catch(error => console.error('Pulizia archivio web snapshot incompleto fallita:', error));
+                }
+                setSnapshotStatus('❌ Snapshot non riuscito: ' + err.message);
+            } finally {
+                setSnapshotBusy(false);
+                renderSnapshotList();
+            }
+        }
+
+        // ---- Modalità snapshot: avvisi per pannelli non inclusi, placeholder per gli iframe ----
+        function clearSectionNotice(id) {
+            const d = document.getElementById(id);
+            if (!d) return;
+            d.querySelectorAll(':scope > .snap-notice').forEach(n => n.remove());
+            d.querySelectorAll(':scope > [data-snap-hidden]').forEach(n => { n.classList.remove('hidden'); delete n.dataset.snapHidden; });
+        }
+
+        function markSectionNotInSnapshot(id) {
+            const d = document.getElementById(id);
+            if (!d) return;
+            clearSectionNotice(id);
+            Array.from(d.children).forEach(ch => {
+                if (ch.tagName !== 'SUMMARY') { ch.classList.add('hidden'); ch.dataset.snapHidden = '1'; }
+            });
+            const n = document.createElement('div');
+            n.className = 'snap-notice px-6 pb-6 text-sm text-slate-400 italic';
+            n.textContent = 'ℹ️ Questo pannello non era aperto quando è stato catturato lo snapshot: non ci sono dati salvati.';
+            d.appendChild(n);
+        }
+
+        function applySnapshotIframes(sectionId, snapshotSection) {
+            const d = document.getElementById(sectionId);
+            if (!d) return;
+            const frames = Array.isArray(snapshotSection && snapshotSection.frames) ? snapshotSection.frames : [];
+            d.querySelectorAll('iframe').forEach((f, index) => {
+                if (!Object.prototype.hasOwnProperty.call(f.dataset, 'snapLiveSrc')) {
+                    f.dataset.snapLiveSrc = f.getAttribute('src') || f.dataset.staticSrc || '';
+                }
+                const saved = frames.find(frame => frame && frame.index === index);
+                const url = saved && typeof saved.src === 'string' ? saved.src : '';
+                let validUrl = false;
+                try {
+                    validUrl = ['http:', 'https:'].includes(new URL(url).protocol);
+                } catch (error) {
+                    validUrl = false;
+                }
+                if (validUrl) {
+                    f.classList.remove('hidden');
+                    f.setAttribute('src', 'about:blank');
+                    f.setAttribute('src', url);
+                } else {
+                    f.setAttribute('src', 'about:blank');
+                    f.classList.add('hidden');
+                }
+                let ph = f.nextElementSibling;
+                if (!ph || !ph.classList.contains('snap-ph')) {
+                    ph = document.createElement('div');
+                    ph.className = 'snap-ph flex-grow flex flex-col items-center justify-center text-center gap-2 p-4 rounded bg-slate-900/60 border border-dashed border-slate-600 text-slate-300 text-sm';
+                    f.after(ph);
+                }
+                if (validUrl) {
+                    ph.classList.add('hidden');
+                } else {
+                    ph.classList.remove('hidden');
+                    ph.innerHTML = '<div class="font-semibold">📴 Pagina non inclusa nello snapshot</div>'
+                        + '<div class="text-xs text-slate-400">URL assente o non valido al momento della cattura.</div>';
+                }
+            });
+        }
+
+        function restoreIframes() {
+            document.querySelectorAll('.snap-ph').forEach(n => n.remove());
+            document.querySelectorAll('iframe[data-snap-live-src]').forEach(f => {
+                f.classList.remove('hidden');
+                f.setAttribute('src', f.dataset.snapLiveSrc || f.dataset.staticSrc || 'about:blank');
+                delete f.dataset.snapLiveSrc;
+            });
+        }
+
+        // ---- Mappa Simulatore in modalità snapshot ----
+        function applySimSnapshotState(sec) {
+            if (!simMap || !sec) return;
+            const lv = (sec.tiles && sec.tiles.levels && sec.tiles.levels.length) ? sec.tiles.levels : null;
+            if (lv) { simMap.setMinZoom(Math.min(...lv)); simMap.setMaxZoom(Math.max(...lv)); }
+            if (sec.view) simMap.setView([sec.view.lat, sec.view.lon], sec.view.zoom, { animate: false });
+            setSimLayer(sec.layer === 'sat' ? 'sat' : 'osm');
+            if (simOsmLayer) simOsmLayer.redraw();
+            if (simSatLayer) simSatLayer.redraw();
+        }
+
+        function resetSimMapLimits() {
+            if (simMap) { simMap.setMinZoom(0); simMap.setMaxZoom(19); }
+            if (simOsmLayer) simOsmLayer.redraw();
+            if (simSatLayer) simSatLayer.redraw();
+        }
+
+        // ---- Consulta / esci ----
+        function renderSnapshotBanner() {
+            const el = document.getElementById('snapshotModeBanner');
+            if (!el) return;
+            const s = activeSnapshotId ? SkySnapshot.get(activeSnapshotId) : null;
+            if (!s) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+            el.classList.remove('hidden');
+            const webMode = s.webArchive ? 'archivio web parziale e indipendente' : 'cache WebView condivisa (snapshot precedente)';
+            el.innerHTML = `<span>📦 Stai consultando lo snapshot <strong>[${esc(SkySnapshot.labelFor(s))}]</strong> · scade tra ${SkySnapshot.formatRemaining(SkySnapshot.remainingMs(s))} · ${webMode}</span>`
+                + `<span id="snapshotWebFaultNotice" class="hidden w-full text-xs text-amber-200"></span>`
+                + `<button onclick="updateDashboard()" class="px-3 py-1 rounded bg-amber-700 hover:bg-amber-600 text-white font-semibold text-xs">Esci dallo snapshot</button>`;
+        }
+
+        function stopSnapshotFaultMonitor() {
+            if (snapshotFaultPoll) clearInterval(snapshotFaultPoll);
+            snapshotFaultPoll = null;
+        }
+
+        async function pollSnapshotWebFaults() {
+            if (!activeSnapshotId || !offlineWebCache) return;
+            try {
+                const result = await offlineWebCache.getSnapshotFaults();
+                const faults = result && Array.isArray(result.faults) ? result.faults : [];
+                if (!faults.length) return;
+                snapshotFaultCount += faults.length;
+                const details = faults.slice(0, 3).map(fault => {
+                    try { return `${new URL(fault.url).host}: ${fault.reason}`; }
+                    catch (error) { return fault.reason || 'risorsa web non disponibile'; }
+                });
+                const notice = document.getElementById('snapshotWebFaultNotice');
+                if (notice) {
+                    notice.classList.remove('hidden');
+                    notice.textContent = `⚠️ Web cache fault: ${snapshotFaultCount} risorse non trovate nell'archivio di questo snapshot. ${details.join(' · ')}`;
+                }
+                setSnapshotStatus(`⚠️ Web cache fault: ${snapshotFaultCount} risorse non archiviate nello snapshot. I contenuti web potrebbero essere incompleti.`);
+            } catch (error) {
+                console.error('Lettura errori archivio web fallita:', error);
+                stopSnapshotFaultMonitor();
+            }
+        }
+
+        function startSnapshotFaultMonitor() {
+            stopSnapshotFaultMonitor();
+            snapshotFaultCount = 0;
+            pollSnapshotWebFaults();
+            snapshotFaultPoll = setInterval(pollSnapshotWebFaults, 1500);
+        }
+
+        async function consultSnapshot(id) {
+            const s = SkySnapshot.get(id);
+            if (!s) {
+                renderSnapshotList();
+                setSnapshotStatus('⏱️ Snapshot scaduto o non più disponibile.');
+                return;
+            }
+            try {
+                await setSnapshotWebCacheMode(true, s);
+            } catch (error) {
+                console.error('Errore attivazione cache WebView per snapshot:', error);
+                setSnapshotStatus(`❌ Impossibile attivare la cache WebView: ${error.message}`);
+                return;
+            }
+            const simWasOpen = isSectionOpen('sectionSimulatore');
+            activeSnapshotId = id;
+            if (s.sections.sectionSimulatore) simLastCoords = '';   // forza il ripristino dello stato della mappa
+
+            document.getElementById('presetSelect').value = '';
+            document.getElementById('latInput').value = Number(s.lat).toFixed(5);
+            document.getElementById('lonInput').value = Number(s.lon).toFixed(5);
+            if (s.dateStr) document.getElementById('dateInput').value = s.dateStr;
+
+            // Stessi pannelli aperti allo scatto; gli altri chiusi.
+            SNAP_ALL_SECTIONS.forEach(sid => {
+                const d = document.getElementById(sid);
+                if (!d) return;
+                clearSectionNotice(sid);
+                d.open = !!s.sections[sid];
+            });
+
+            const label = document.getElementById('detectedCityLabel');
+            if (label) {
+                label.innerHTML = s.cityName
+                    ? `📦 Comune (snapshot): <strong>${esc(s.cityName)}</strong>${s.regionName ? ' (' + esc(s.regionName) + ')' : ''}`
+                    : '📦 Snapshot: comune non rilevato';
+                label.className = 'text-sm px-3 py-1 bg-amber-900 text-amber-200 rounded-full border border-amber-700 shadow-inner';
+            }
+
+            updateDashboard({ fromSnapshot: true });   // aggiorna lo stato globale e ridisegna i pannelli aperti dallo snapshot
+            if (s.sections.sectionSimulatore && simWasOpen) handleSimulatoreToggle();   // già aperto: niente evento toggle
+            renderSnapshotBanner();
+            startSnapshotFaultMonitor();
+            renderSnapshotList();
+            setSnapshotStatus(s.webArchive
+                ? `📦 Snapshot [${SkySnapshot.labelFor(s)}] caricato. Le pagine iframe vengono servite dall'archivio separato; eventuali risorse mancanti saranno segnalate.`
+                : `📦 Snapshot [${SkySnapshot.labelFor(s)}] precedente alla cattura per-snapshot: gli iframe usano la cache WebView condivisa.`);
+        }
+
+        async function exitSnapshotMode() {
+            if (!activeSnapshotId) return;
+            stopSnapshotFaultMonitor();
+            activeSnapshotId = null;
+            try {
+                await setSnapshotWebCacheMode(false);
+            } catch (error) {
+                console.error('Errore ripristino cache WebView:', error);
+                setSnapshotStatus(`⚠️ Impossibile ripristinare la modalità cache WebView: ${error.message}`);
+            }
+            SNAP_ALL_SECTIONS.forEach(clearSectionNotice);
+            restoreIframes();
+            simLastCoords = '';
+            resetSimMapLimits();
+            renderSnapshotBanner();
+            renderSnapshotList();
+        }
+
+        // ---- Elenco nel Pannello di Controllo ----
+        function renderSnapshotList() {
+            const box = document.getElementById('snapshotList');
+            if (!box) return;
+            const snaps = SkySnapshot.list();
+            const hint = document.getElementById('snapshotOfflineHint');
+            if (hint) hint.classList.toggle('hidden', !(navigator.onLine === false && snaps.length));
+
+            if (!snaps.length) {
+                box.innerHTML = '<p class="text-xs text-slate-500 italic">Nessuno snapshot salvato (massimo 5, durata 24 ore).</p>';
+                return;
+            }
+            box.innerHTML = snaps.map(s => {
+                const names = Object.keys(s.sections || {}).map(k => SNAP_LABELS[k]).filter(Boolean).join(', ');
+                const sim = s.sections && s.sections.sectionSimulatore;
+                const tiles = (sim && sim.tiles && sim.tiles.saved) ? ` · ${sim.tiles.saved} tile` : '';
+                const webArchive = s.webArchive;
+                const webSize = webArchive && webArchive.capturedBytes
+                    ? ` · ${(webArchive.capturedBytes / (1024 * 1024)).toFixed(1)} MB web`
+                    : '';
+                const webFaults = webArchive && webArchive.faults ? ` · ${webArchive.faults} risorse web non archiviate` : '';
+                const kb = Math.max(1, Math.round(SkySnapshot.sizeBytes(s) / 1024));
+                const active = (s.id === activeSnapshotId) ? 'border-amber-500 bg-amber-900/30' : 'border-slate-600 bg-slate-700/50 hover:bg-slate-700';
+                return `<div class="flex gap-2">
+                    <button onclick="consultSnapshot('${esc(s.id)}')" class="flex-1 text-left px-3 py-2 rounded border ${active} transition">
+                        <span class="text-sm text-white">📦 Consulta lo snapshot offline <strong class="text-amber-200">[${esc(SkySnapshot.labelFor(s))}]</strong></span>
+                        <span class="block text-[11px] text-slate-400 mt-0.5">scade tra ${SkySnapshot.formatRemaining(SkySnapshot.remainingMs(s))} · ${esc(names)} · ${kb} KB dati${tiles}${webSize}${webFaults}</span>
+                    </button>
+                    <button onclick="deleteSnapshot('${esc(s.id)}')" title="Elimina snapshot" class="px-3 rounded border border-slate-600 text-slate-300 hover:bg-slate-600 transition">✕</button>
+                </div>`;
+            }).join('');
+        }
+
+        async function deleteSnapshot(id) {
+            const s = SkySnapshot.get(id);
+            if (!s) { renderSnapshotList(); return; }
+            if (!confirm(`Eliminare lo snapshot [${SkySnapshot.labelFor(s)}]?`)) return;
+            if (activeSnapshotId === id) {
+                await exitSnapshotMode();
+                SkySnapshot.remove(id);
+                updateDashboard();   // i pannelli tornano ai dati live: non devono restare dati di uno snapshot cancellato
+            } else {
+                SkySnapshot.remove(id);
+            }
+            renderSnapshotList();
+        }
+
+        // Cancella tutto ciò che l'app ha scritto sul dispositivo (snapshot, tile, storage, cache, cookie), poi riparte pulita.
+        async function wipeAllAppData() {
+            if (snapshotBusy) return;
+            if (!confirm('Cancellare TUTTI i dati salvati dall\'app (snapshot, tile e impostazioni locali)? L\'operazione non si può annullare.')) return;
+            setSnapshotBusy(true);
+            const steps = [];
+            try {
+                stopHousekeeping();
+                activeSnapshotId = null;
+                try { await setSnapshotWebCacheMode(false); } catch (e) {
+                    console.error('Errore ripristino modalità cache WebView:', e);
+                    setSnapshotStatus(`⚠️ Modalità cache WebView non ripristinata: ${e.message}`);
+                }
+                try { SkySnapshot.clear(); } catch (e) {}
+                try { await clearSnapshotWebCache(); } catch (e) {
+                    console.error('Errore cancellazione cache WebView:', e);
+                    setSnapshotStatus(`⚠️ Cache WebView non cancellata: ${e.message}`);
+                }
+                try { localStorage.clear(); } catch (e) {}
+                try { sessionStorage.clear(); } catch (e) {}
+                try {
+                    if (window.caches) { for (const k of await caches.keys()) await caches.delete(k); }
+                } catch (e) {}
+                try {
+                    document.cookie.split(';').forEach(c => {
+                        const name = c.split('=')[0].trim();
+                        if (name) document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+                    });
+                } catch (e) {}
+                try {
+                    const names = (indexedDB.databases ? (await indexedDB.databases()).map(d => d.name) : []).concat(['skyguardian-tiles']);
+                    for (const name of new Set(names)) {
+                        await new Promise((res) => {
+                            const r = indexedDB.deleteDatabase(name);
+                            r.onsuccess = r.onerror = r.onblocked = () => res();
+                            setTimeout(res, 3000);
+                        });
+                    }
+                } catch (e) {}
+                try {
+                    if (navigator.serviceWorker) { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); }
+                } catch (e) {}
+            } finally {
+                location.reload();   // ripartenza pulita: nessuno stato rimasto in memoria
+            }
+        }
+
+        // ---- Stato rete + pulizia automatica (solo con l'app in primo piano) ----
+        function updateConnectionBadge() {
+            const el = document.getElementById('connectionBadge');
+            if (el) {
+                const on = navigator.onLine !== false;
+                el.textContent = on ? '● Online' : '● Offline';
+                el.className = 'text-xs px-2 py-1 rounded-full border w-fit ' +
+                    (on ? 'border-emerald-700 text-emerald-300 bg-emerald-900/30' : 'border-amber-700 text-amber-300 bg-amber-900/30');
+            }
+            renderSnapshotList();
+        }
+
+        async function housekeepSnapshots() {
+            SkySnapshot.purge();
+            if (activeSnapshotId && !SkySnapshot.get(activeSnapshotId)) {
+                await exitSnapshotMode();
+                setSnapshotStatus('⏱️ Lo snapshot che stavi consultando è scaduto ed è stato cancellato.');
+                updateDashboard();   // i pannelli tornano ai dati live (o a un errore se sei offline)
+            }
+            renderSnapshotList();
+            renderSnapshotBanner();
+        }
+
+        // L'unico timer dell'app: gira SOLO mentre la pagina è visibile. In secondo piano o a app chiusa non esiste.
+        let housekeepingTimer = null;
+        function startHousekeeping() {
+            if (!housekeepingTimer) housekeepingTimer = setInterval(housekeepSnapshots, 60 * 1000);
+        }
+        function stopHousekeeping() {
+            if (housekeepingTimer) { clearInterval(housekeepingTimer); housekeepingTimer = null; }
+        }
+
+        function initSnapshots() {
+            // Iframe con indirizzo fisso nell'HTML (es. radar Meteox): serve ricordarlo per ripristinarlo.
+            document.querySelectorAll('iframe[src]').forEach(f => {
+                const s = f.getAttribute('src');
+                if (s && s !== 'about:blank') f.dataset.staticSrc = s;
+            });
+            housekeepSnapshots();
+            const validSnapshotIds = SkySnapshot.ids();
+            getTileStore().pruneTo(validSnapshotIds).catch(error => console.warn('Pulizia tile snapshot orfane fallita:', error));
+            if (isNativeApp && offlineWebCache && window.Capacitor.isPluginAvailable('OfflineWebCache')) {
+                offlineWebCache.pruneSnapshots({ snapshotIds: validSnapshotIds })
+                    .catch(error => console.error('Pulizia archivi web snapshot orfani fallita:', error));
+            }
+            updateConnectionBadge();
+            window.addEventListener('online', updateConnectionBadge);
+            window.addEventListener('offline', updateConnectionBadge);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') { housekeepSnapshots(); updateConnectionBadge(); startHousekeeping(); }
+                else stopHousekeeping();
+            });
+            window.addEventListener('pagehide', stopHousekeeping);
+            if (document.visibilityState !== 'hidden') startHousekeeping();
+        }
 
     </script>
 </body>

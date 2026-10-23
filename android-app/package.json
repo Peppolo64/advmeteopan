@@ -1,0 +1,26 @@
+{
+  "name": "skyguardian",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SkyGuardian - dashboard meteo/astronomia con snapshot offline 24h",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i src/input.css -o www/vendor/tailwind.css --minify",
+    "vendor": "node scripts/copy-vendor.js",
+    "build:www": "node scripts/build-www.js",
+    "build": "npm run build:www && npm run vendor && npm run build:css",
+    "sync": "npm run build && npx cap sync android && node scripts/harden-manifest.js",
+    "test": "npm run build:www && node scripts/test-snapshot.js && node scripts/test-manifest.js && node scripts/test-build-www.js",
+    "test:e2e": "python3 scripts/e2e/e2e.py"
+  },
+  "dependencies": {
+    "@capacitor/android": "6.1.2",
+    "@capacitor/cli": "6.1.2",
+    "@capacitor/core": "6.1.2"
+  },
+  "devDependencies": {
+    "leaflet": "1.9.4",
+    "satellite.js": "5.0.0",
+    "suncalc": "1.9.0",
+    "tailwindcss": "3.4.17"
+  }
+}

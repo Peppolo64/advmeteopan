@@ -1,0 +1,65 @@
+name: Build APK
+
+on:
+  workflow_dispatch:        # avvio manuale dal tab "Actions"
+  push:
+    branches: [main]
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Installa dipendenze
+        run: npm ci --no-audit --no-fund
+
+      - name: Test logica snapshot
+        run: npm test
+
+      - name: Librerie locali + CSS Tailwind
+        run: npm run build
+
+      - name: Crea/aggiorna il progetto Android
+        run: |
+          [ -d android ] || npx cap add android
+          npx cap sync android
+
+      - name: Rafforza il manifest (niente backup, niente traffico in chiaro)
+        run: node scripts/harden-manifest.js
+
+      - name: Verifica che l'app non lavori in background
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          echo "--- $M"; cat "$M"
+          if grep -nE '<service|<receiver|WAKE_LOCK|FOREGROUND_SERVICE|RECEIVE_BOOT_COMPLETED|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|ACCESS_BACKGROUND_LOCATION' "$M"; then
+            echo "::error::Il manifest dichiara servizi, receiver o permessi per lavorare in background"; exit 1
+          fi
+          grep -q 'android:allowBackup="false"' "$M" || { echo "::error::allowBackup non è false"; exit 1; }
+          grep -q 'android:usesCleartextTraffic="false"' "$M" || { echo "::error::traffico in chiaro non disattivato"; exit 1; }
+          echo "OK: nessun servizio/receiver/permesso di background, backup disattivato, solo HTTPS"
+
+      - name: Compila APK (debug)
+        run: ./android/gradlew assembleDebug --no-daemon
+
+      - name: Componenti delle librerie nel manifest finale (solo informativo)
+        run: |
+          F=$(find android/app/build -path '*merged_manifests*' -name AndroidManifest.xml | head -1)
+          echo "$F"; grep -nE '<service|<receiver|uses-permission' "$F" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyGuardian-debug-apk
+          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
