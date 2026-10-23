@@ -52,7 +52,7 @@ jobs:
           echo "OK: nessun servizio/receiver/permesso di background, backup disattivato, solo HTTPS"
 
       - name: Compila APK (debug)
-        run: ./android/gradlew assembleDebug --no-daemon
+        run: ./android/gradlew -p android assembleDebug --no-daemon
 
       - name: Componenti delle librerie nel manifest finale (solo informativo)
         run: |

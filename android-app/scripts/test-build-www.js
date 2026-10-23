@@ -114,8 +114,8 @@ assert(html.includes('Web cache fault'), 'la UI deve mostrare un avviso quando u
 assert(html.includes('beginSnapshotCapture({ snapshotId, urls })'), 'la cattura deve archiviare le pagine iframe aperte');
 const apkWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'build-apk.yml'), 'utf8');
 assert(
-  apkWorkflow.includes('run: ./android/gradlew assembleDebug --no-daemon'),
-  'il workflow APK deve richiamare il Gradle wrapper dentro android/'
+  apkWorkflow.includes('run: ./android/gradlew -p android assembleDebug --no-daemon'),
+  'il workflow APK deve richiamare il wrapper e indicare android/ come root Gradle'
 );
 const mainActivity = fs.readFileSync(
   path.join(root, 'android', 'app', 'src', 'main', 'java', 'it', 'skyguardian', 'app', 'MainActivity.java'),
