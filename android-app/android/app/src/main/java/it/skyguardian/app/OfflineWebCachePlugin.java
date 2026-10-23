@@ -91,19 +91,15 @@ public class OfflineWebCachePlugin extends Plugin {
     @PluginMethod
     public void getSnapshotFaults(PluginCall call) {
         JSArray result = new JSArray();
-        try {
-            for (java.util.Map<String, String> fault : archive.takeFaults()) {
-                JSObject item = new JSObject();
-                item.put("url", fault.get("url"));
-                item.put("reason", fault.get("reason"));
-                result.put(item);
-            }
-            JSObject payload = new JSObject();
-            payload.put("faults", result);
-            call.resolve(payload);
-        } catch (JSONException e) {
-            call.reject("Impossibile leggere gli avvisi dell'archivio web.", e);
+        for (java.util.Map<String, String> fault : archive.takeFaults()) {
+            JSObject item = new JSObject();
+            item.put("url", fault.get("url"));
+            item.put("reason", fault.get("reason"));
+            result.put(item);
         }
+        JSObject payload = new JSObject();
+        payload.put("faults", result);
+        call.resolve(payload);
     }
 
     @PluginMethod
