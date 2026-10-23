@@ -6,8 +6,8 @@
     <title>SkyGuardian</title>
     <script>
         const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-        const offlineWebCache = isNativeApp && window.Capacitor.registerPlugin
-            ? window.Capacitor.registerPlugin('OfflineWebCache')
+        const offlineWebCache = isNativeApp && window.Capacitor.Plugins
+            ? window.Capacitor.Plugins.OfflineWebCache
             : null;
         if (isNativeApp) document.documentElement.classList.add('native-app');
     </script>

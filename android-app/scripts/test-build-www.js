@@ -41,6 +41,32 @@ assert.strictEqual(
   true,
   'Capacitor deve attivare la modalità nativa'
 );
+assert(
+  bootstrap[1].includes('window.Capacitor.Plugins.OfflineWebCache'),
+  'il plugin nativo deve essere ottenuto dal registro plugin del bridge Capacitor'
+);
+assert(
+  !bootstrap[1].includes("window.Capacitor.registerPlugin('OfflineWebCache')"),
+  'l’HTML statico non deve invocare registerPlugin non esposto dal bridge Android'
+);
+const nativeCachePluginProxy = { setSnapshotMode() {} };
+const bootstrapPlugin = vm.runInNewContext(
+  `${bootstrap[1]}; offlineWebCache;`,
+  {
+    window: {
+      Capacitor: {
+        isNativePlatform: () => true,
+        Plugins: { OfflineWebCache: nativeCachePluginProxy },
+      },
+    },
+    document: { documentElement: { classList: { add() {} } } },
+  }
+);
+assert.strictEqual(
+  bootstrapPlugin,
+  nativeCachePluginProxy,
+  'il bootstrap Android deve rendere disponibile OfflineWebCache al codice snapshot'
+);
 
 const refreshFunction = html.match(/function refreshAllOpenSections\(\) \{[\s\S]*?\n        \}/);
 assert(refreshFunction, 'aggiornamento delle sezioni aperte mancante');

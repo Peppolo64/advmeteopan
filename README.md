@@ -46,6 +46,8 @@ Usa PNG RGBA quadrati. Per l'icona adattiva il foreground dovrebbe avere traspar
 
 Durante la cattura, l'app ricarica gli iframe dei pannelli aperti e il plugin nativo `OfflineWebCache` intercetta le richieste GET dei frame e salva le risposte nell'area privata dell'app, in una cartella distinta per ID snapshot. Il limite è 48 MiB per snapshot e 12 MiB per singola risorsa. In consultazione la WebView usa `LOAD_CACHE_ONLY` e il plugin serve le risorse archiviate per quello snapshot: le risposte non vengono condivise o sovrascritte dagli snapshot successivi. Eliminazione, scadenza e **Cancella tutti i dati** rimuovono anche i relativi file.
 
+Il plugin è registrato in `MainActivity` e il bundle statico lo richiama tramite il bridge Android `Capacitor.Plugins.OfflineWebCache`. Per una build locale, eseguire `npm run sync` prima di Gradle; il workflow GitHub sincronizza automaticamente il progetto Android prima di compilare l'APK.
+
 Gli snapshot creati da versioni precedenti non contengono l'archivio privato e continuano a usare la vecchia cache WebView condivisa.
 
 Se il plugin Android non è presente o non riesce ad attivarsi, lo snapshot dei dati locali continua a caricarsi; vengono disattivati solo gli iframe e il relativo pannello spiega il motivo.
