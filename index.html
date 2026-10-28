@@ -11,6 +11,24 @@
             : null;
         if (isNativeApp) document.documentElement.classList.add('native-app');
     </script>
+    <script>
+        function rememberSnapshotIframeLocation(event) {
+            const data = event.data;
+            if (!data || data.type !== 'skyguardian-frame-location' || typeof data.href !== 'string') return;
+            const frame = Array.from(document.querySelectorAll('iframe'))
+                .find(candidate => candidate.contentWindow === event.source);
+            if (!frame) return;
+            try {
+                const url = new URL(data.href);
+                if (!['http:', 'https:'].includes(url.protocol)) return;
+                if (event.origin !== 'null' && event.origin !== url.origin) return;
+                frame.dataset.snapshotCurrentSrc = url.href;
+            } catch (error) {
+                return;
+            }
+        }
+        window.addEventListener('message', rememberSnapshotIframeLocation);
+    </script>
     <meta name="theme-color" content="#0f172a">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
@@ -1347,7 +1365,7 @@
         function updateCoordinateIframes(lat, lon) {
             // Windy
             const windyUrl = `https://www.windy.com/?${lat},${lon},10`;
-            document.getElementById('windyIframe').src = `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=°C&metricWind=km/h&zoom=10&overlay=wind&product=ecmwf&level=surface&lat=${lat}&lon=${lon}`;
+            setIframeSrc(document.getElementById('windyIframe'), `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=mm&metricTemp=°C&metricWind=km/h&zoom=10&overlay=wind&product=ecmwf&level=surface&lat=${lat}&lon=${lon}`);
             document.getElementById('linkWindy').href = windyUrl;
             document.getElementById('linkWindy').innerText = windyUrl;
 
@@ -1374,12 +1392,12 @@
             // METEOBLUE IFRAMES
 
             // 1. Meteogramma (Dinamico per coordinate, endpoint pubblico senza firme, layout bright)
-            document.getElementById('meteoblueMeteogramIframe').src = `https://www.meteoblue.com/it/tempo/widget/three?geoloc=fixed&lat=${lat}&lon=${lon}&tz=Europe%2FRome&days=4&tempresolution=1&windresolution=1&waterresolution=1&format=h&winddirection=0&layout=bright&autowidth=auto`;
+            setIframeSrc(document.getElementById('meteoblueMeteogramIframe'), `https://www.meteoblue.com/it/tempo/widget/three?geoloc=fixed&lat=${lat}&lon=${lon}&tz=Europe%2FRome&days=4&tempresolution=1&windresolution=1&waterresolution=1&format=h&winddirection=0&layout=bright&autowidth=auto`);
             // 2. Seeing
-            document.getElementById('meteoblueSeeingIframe').src = `https://www.meteoblue.com/it/tempo/widget/seeing/${meteoblueSlug}?geoloc=fixed`;
+            setIframeSrc(document.getElementById('meteoblueSeeingIframe'), `https://www.meteoblue.com/it/tempo/widget/seeing/${meteoblueSlug}?geoloc=fixed`);
 
             // 3. Mappa
-            document.getElementById('meteoblueMapIframe').src = `https://www.meteoblue.com/it/tempo/mappe/widget/${meteoblueSlug}?windAnimation=1&gust=1&satellite=1&cloudsAndPrecipitation=1&temperature=1&sunshine=1&extremeForecastIndex=1&geoloc=fixed&tempunit=C&lengthunit=metric&windunit=km%252Fh&zoom=8&autowidth=auto`;
+            setIframeSrc(document.getElementById('meteoblueMapIframe'), `https://www.meteoblue.com/it/tempo/mappe/widget/${meteoblueSlug}?windAnimation=1&gust=1&satellite=1&cloudsAndPrecipitation=1&temperature=1&sunshine=1&extremeForecastIndex=1&geoloc=fixed&tempunit=C&lengthunit=metric&windunit=km%252Fh&zoom=8&autowidth=auto`);
         }
 
         // ==========================================
@@ -1387,7 +1405,7 @@
         // ==========================================
         function updateLightPollution(lat, lon) {
             const lpUrl = `https://djlorenz.github.io/astronomy/lp2022/overlay/dark.html#zoom=9&lat=${lat}&lon=${lon}&layers=B0FFFFFFFTFFFFFFFFFF`;
-            document.getElementById('lightPollutionIframe').src = lpUrl;
+            setIframeSrc(document.getElementById('lightPollutionIframe'), lpUrl);
             document.getElementById('linkLightPollution').href = lpUrl;
             document.getElementById('linkLightPollution').innerText = lpUrl;
         }
@@ -1398,12 +1416,12 @@
         // ==========================================
         function updateLiveStations(lat, lon) {
             const wsUrl = `https://maps.weathersicily.it/?lat=${lat}&lon=${lon}&zoom=10`;
-            document.getElementById('weatherSicilyIframe').src = wsUrl;
+            setIframeSrc(document.getElementById('weatherSicilyIframe'), wsUrl);
             document.getElementById('linkWeatherSicily').href = wsUrl;
             document.getElementById('linkWeatherSicily').innerText = wsUrl;
 
             const wcUrl = `https://app.weathercloud.net/map?lat=${lat}&lon=${lon}&zoom=10&layer=temp`;
-            document.getElementById('weatherCloudIframe').src = wcUrl;
+            setIframeSrc(document.getElementById('weatherCloudIframe'), wcUrl);
             document.getElementById('linkWeatherCloud').href = wcUrl;
             document.getElementById('linkWeatherCloud').innerText = wcUrl;
         }
@@ -1714,9 +1732,9 @@ function renderPassesTable(passes) {
                 urlMeteoAm = `https://www.meteoam.it/it/meteo-citta/${slugHyphen}`;
             }
 
-            document.getElementById('treBMeteoIframe').src = url3b;
-            document.getElementById('ilMeteoIframe').src = urlIlMeteo;
-            document.getElementById('meteoAmIframe').src = urlMeteoAm;
+            setIframeSrc(document.getElementById('treBMeteoIframe'), url3b);
+            setIframeSrc(document.getElementById('ilMeteoIframe'), urlIlMeteo);
+            setIframeSrc(document.getElementById('meteoAmIframe'), urlMeteoAm);
 
             document.getElementById('link3b').href = url3b;
             document.getElementById('link3b').innerText = url3b;
@@ -2237,6 +2255,11 @@ function renderPassesTable(passes) {
             if (el) el.textContent = msg;
         }
 
+        function setIframeSrc(frame, src) {
+            delete frame.dataset.snapshotCurrentSrc;
+            frame.setAttribute('src', src);
+        }
+
         async function setSnapshotWebCacheMode(enabled, snapshot) {
             if (!isNativeApp) return;
             if (!offlineWebCache || !window.Capacitor.isPluginAvailable('OfflineWebCache')) {
@@ -2300,8 +2323,8 @@ function renderPassesTable(passes) {
                     };
                     const timer = setTimeout(() => finish(true), 18000);
                     frame.addEventListener('load', onLoad);
-                    frame.setAttribute('src', 'about:blank');
-                    setTimeout(() => frame.setAttribute('src', src), 80);
+                    setIframeSrc(frame, 'about:blank');
+                    setTimeout(() => setIframeSrc(frame, src), 80);
                 }));
                 await Promise.all(reloads);
                 const response = await offlineWebCache.finishSnapshotCapture();
@@ -2529,7 +2552,7 @@ function renderPassesTable(passes) {
             const section = document.getElementById(sectionId);
             if (!section) return [];
             return Array.from(section.querySelectorAll('iframe')).map((frame, index) => {
-                const rawUrl = frame.getAttribute('src');
+                const rawUrl = frame.dataset.snapshotCurrentSrc || frame.getAttribute('src');
                 if (!rawUrl || rawUrl === 'about:blank') return null;
                 try {
                     const url = new URL(rawUrl, document.baseURI);
@@ -2675,7 +2698,7 @@ function renderPassesTable(passes) {
             const frames = Array.isArray(snapshotSection && snapshotSection.frames) ? snapshotSection.frames : [];
             d.querySelectorAll('iframe').forEach((f, index) => {
                 if (!Object.prototype.hasOwnProperty.call(f.dataset, 'snapLiveSrc')) {
-                    f.dataset.snapLiveSrc = f.getAttribute('src') || f.dataset.staticSrc || '';
+                f.dataset.snapLiveSrc = f.dataset.snapshotCurrentSrc || f.getAttribute('src') || f.dataset.staticSrc || '';
                 }
                 const saved = frames.find(frame => frame && frame.index === index);
                 const url = saved && typeof saved.src === 'string' ? saved.src : '';
@@ -2687,10 +2710,10 @@ function renderPassesTable(passes) {
                 }
                 if (validUrl && snapshotWebCacheAvailable) {
                     f.classList.remove('hidden');
-                    f.setAttribute('src', 'about:blank');
-                    f.setAttribute('src', url);
+                    setIframeSrc(f, 'about:blank');
+                    setIframeSrc(f, url);
                 } else {
-                    f.setAttribute('src', 'about:blank');
+                    setIframeSrc(f, 'about:blank');
                     f.classList.add('hidden');
                 }
                 let ph = f.nextElementSibling;
@@ -2716,7 +2739,7 @@ function renderPassesTable(passes) {
             document.querySelectorAll('.snap-ph').forEach(n => n.remove());
             document.querySelectorAll('iframe[data-snap-live-src]').forEach(f => {
                 f.classList.remove('hidden');
-                f.setAttribute('src', f.dataset.snapLiveSrc || f.dataset.staticSrc || 'about:blank');
+                setIframeSrc(f, f.dataset.snapLiveSrc || f.dataset.staticSrc || 'about:blank');
                 delete f.dataset.snapLiveSrc;
             });
         }

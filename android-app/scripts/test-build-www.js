@@ -68,6 +68,23 @@ assert.strictEqual(
   'il bootstrap Android deve rendere disponibile OfflineWebCache al codice snapshot'
 );
 
+const iframeLocationTracker = html.match(/function rememberSnapshotIframeLocation\(event\) \{[\s\S]*?\n        \}/);
+assert(iframeLocationTracker, 'rilevamento URL corrente degli iframe mancante');
+const trackedFrame = {
+  contentWindow: {},
+  dataset: {},
+};
+const trackedIframeLocation = 'https://meteo.example/previsioni/domani';
+vm.runInNewContext(
+  `${iframeLocationTracker[0]}; rememberSnapshotIframeLocation({ data: { type: 'skyguardian-frame-location', href: '${trackedIframeLocation}' }, source: frameWindow, origin: 'https://meteo.example' });`,
+  { URL, frameWindow: trackedFrame.contentWindow, document: { querySelectorAll: () => [trackedFrame] } }
+);
+assert.strictEqual(
+  trackedFrame.dataset.snapshotCurrentSrc,
+  trackedIframeLocation,
+  'il frame deve conservare l’URL della pagina cross-origin attualmente visualizzata'
+);
+
 const refreshFunction = html.match(/function refreshAllOpenSections\(\) \{[\s\S]*?\n        \}/);
 assert(refreshFunction, 'aggiornamento delle sezioni aperte mancante');
 const refreshedSections = [];
@@ -92,10 +109,13 @@ const savedFrames = vm.runInNewContext(
       baseURI: 'https://app.example/',
       getElementById: () => ({
         querySelectorAll: () => [
-          { getAttribute: () => 'https://meteo.example/page' },
-          { getAttribute: () => 'about:blank' },
-          { getAttribute: () => '' },
-          { getAttribute: () => 'javascript:alert(1)' },
+          {
+            dataset: { snapshotCurrentSrc: 'https://meteo.example/previsioni/domani' },
+            getAttribute: () => 'https://meteo.example/page',
+          },
+          { dataset: {}, getAttribute: () => 'about:blank' },
+          { dataset: {}, getAttribute: () => '' },
+          { dataset: {}, getAttribute: () => 'javascript:alert(1)' },
         ],
       }),
     },
@@ -103,8 +123,8 @@ const savedFrames = vm.runInNewContext(
 );
 assert.deepStrictEqual(
   JSON.parse(JSON.stringify(savedFrames)),
-  [{ index: 0, src: 'https://meteo.example/page' }],
-  'lo snapshot deve conservare solo URL HTTP(S) reali degli iframe'
+  [{ index: 0, src: 'https://meteo.example/previsioni/domani' }],
+  'lo snapshot deve preferire l’URL corrente del frame al suo src iniziale e conservare solo URL HTTP(S)'
 );
 
 const snapshotFrameUrls = html.match(/function snapshotFrameUrls\(sections\) \{[\s\S]*?\n        \}/);
@@ -120,6 +140,8 @@ assert.deepStrictEqual(
 
 const applySnapshotIframes = html.match(/function applySnapshotIframes\(sectionId, snapshotSection\) \{[\s\S]*?\n        \}/);
 assert(applySnapshotIframes, 'applicazione iframe durante la consultazione snapshot mancante');
+const setIframeSrc = html.match(/function setIframeSrc\(frame, src\) \{[\s\S]*?\n        \}/);
+assert(setIframeSrc, 'aggiornamento URL iframe deve invalidare il percorso precedentemente tracciato');
 const frameClasses = new Set();
 const iframe = {
   dataset: {},
@@ -142,7 +164,7 @@ const placeholder = {
   innerHTML: '',
 };
 vm.runInNewContext(
-  `${applySnapshotIframes[0]}; applySnapshotIframes('sectionCommerciali', { frames: [{ index: 0, src: 'https://meteo.example/page' }] });`,
+  `${setIframeSrc[0]}; ${applySnapshotIframes[0]}; applySnapshotIframes('sectionCommerciali', { frames: [{ index: 0, src: 'https://meteo.example/page' }] });`,
   {
     URL,
     snapshotWebCacheAvailable: false,
@@ -174,6 +196,8 @@ assert(nativeArchive.includes('MAX_SNAPSHOT_BYTES'), 'l’archivio per snapshot 
 assert(nativeArchive.includes('risorsa non archiviata'), 'un cache miss deve essere registrato e segnalato');
 assert(nativeArchive.includes('deleteRecursively(directory(id))'), 'la rimozione dello snapshot deve eliminare il suo archivio web');
 assert(nativeCachePlugin.includes('archive.intercept(request)'), 'il client Capacitor deve intercettare richieste iframe per replay');
+assert(nativeCachePlugin.includes('WebViewCompat.addDocumentStartJavaScript'), 'Android deve tracciare l’URL attuale nei frame cross-origin');
+assert(nativeCachePlugin.includes('WebViewFeature.DOCUMENT_START_SCRIPT'), 'il tracciamento deve dipendere dal supporto WebView agli script document-start');
 assert(html.includes('Web cache fault'), 'la UI deve mostrare un avviso quando una risorsa web non è archiviata');
 assert(html.includes('beginSnapshotCapture({ snapshotId, urls })'), 'la cattura deve archiviare le pagine iframe aperte');
 const apkWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'build-apk.yml'), 'utf8');

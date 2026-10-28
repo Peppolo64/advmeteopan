@@ -4,6 +4,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -13,16 +15,28 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.json.JSONException;
 
 @CapacitorPlugin(name = "OfflineWebCache")
 public class OfflineWebCachePlugin extends Plugin {
+    private static final String FRAME_LOCATION_SCRIPT =
+        "(function(){if(window===window.top)return;" +
+        "var report=function(){window.parent.postMessage({type:'skyguardian-frame-location',href:window.location.href},'*');};" +
+        "report();window.addEventListener('hashchange',report);window.addEventListener('popstate',report);" +
+        "['pushState','replaceState'].forEach(function(method){var original=history[method];" +
+        "history[method]=function(){var result=original.apply(this,arguments);report();return result;};});" +
+        "})();";
     private SnapshotWebArchive archive;
 
     @Override
     public void load() {
         archive = new SnapshotWebArchive(getContext());
+        WebView webView = getBridge().getWebView();
+        if (webView != null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(webView, FRAME_LOCATION_SCRIPT, Collections.singleton("*"));
+        }
         getBridge().setWebViewClient(new BridgeWebViewClient(getBridge()) {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
