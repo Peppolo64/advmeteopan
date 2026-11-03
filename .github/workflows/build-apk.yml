@@ -51,8 +51,11 @@ jobs:
           grep -q 'android:usesCleartextTraffic="false"' "$M" || { echo "::error::traffico in chiaro non disattivato"; exit 1; }
           echo "OK: nessun servizio/receiver/permesso di background, backup disattivato, solo HTTPS"
 
-      - name: Compila APK (debug)
+      - name: Compila APK Android (debug)
         run: ./android/gradlew -p android assembleDebug --no-daemon
+
+      - name: Compila APK Wear OS (debug)
+        run: ./android/gradlew -p android :wear:assembleDebug --no-daemon
 
       - name: Componenti delle librerie nel manifest finale (solo informativo)
         run: |
@@ -61,5 +64,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SkyGuardian-debug-apk
-          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          name: SkyGuardian-Android-WearOS-apk
+          path: |
+            android-app/android/app/build/outputs/apk/debug/app-debug.apk
+            android-app/android/wear/build/outputs/apk/debug/wear-debug.apk

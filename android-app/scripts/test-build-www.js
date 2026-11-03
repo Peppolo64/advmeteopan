@@ -205,6 +205,16 @@ assert(
   apkWorkflow.includes('run: ./android/gradlew -p android assembleDebug --no-daemon'),
   'il workflow APK deve richiamare il wrapper e indicare android/ come root Gradle'
 );
+assert(
+  apkWorkflow.includes('run: ./android/gradlew -p android :wear:assembleDebug --no-daemon'),
+  'il workflow APK deve compilare anche il modulo Wear OS'
+);
+const wearManifest = fs.readFileSync(
+  path.join(root, 'android', 'wear', 'src', 'main', 'AndroidManifest.xml'),
+  'utf8'
+);
+assert(wearManifest.includes('android.hardware.type.watch'), 'il manifest Wear OS deve dichiarare il supporto watch');
+assert(wearManifest.includes('android.permission.ACCESS_COARSE_LOCATION'), 'l’app watch deve poter usare la posizione approssimativa');
 const mainActivity = fs.readFileSync(
   path.join(root, 'android', 'app', 'src', 'main', 'java', 'it', 'skyguardian', 'app', 'MainActivity.java'),
   'utf8'

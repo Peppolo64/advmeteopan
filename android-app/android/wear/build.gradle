@@ -1,0 +1,14 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "it.skyguardian.wear"
+    compileSdk rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        applicationId "it.skyguardian.wear"
+        minSdkVersion 30
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+    }
+}

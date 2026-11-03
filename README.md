@@ -8,7 +8,7 @@ Vercel continua a pubblicare la cartella principale come sito statico. Le config
 
 ## Build APK
 
-Il workflow GitHub Actions `.github/workflows/build-apk.yml` compila l'APK debug automaticamente a ogni push su `main`; è anche avviabile manualmente dalla scheda **Actions**. Alla fine scarica l'artefatto **SkyGuardian-debug-apk**.
+Il workflow GitHub Actions `.github/workflows/build-apk.yml` compila l'APK debug per Android e Wear OS automaticamente a ogni push su `main`; è anche avviabile manualmente dalla scheda **Actions**. Alla fine scarica l'artefatto **SkyGuardian-Android-WearOS-apk**, contenente `app-debug.apk` per il telefono e `wear-debug.apk` per gli smartwatch Wear OS.
 
 Per creare l'APK in locale servono Node.js 18+, Java 17 e Android SDK:
 
@@ -21,10 +21,24 @@ npx cap add android   # solo la prima volta
 npx cap sync android
 node scripts/harden-manifest.js
 cd android
-./gradlew assembleDebug
+./gradlew :app:assembleDebug :wear:assembleDebug
 ```
 
 `npm test` verifica la logica degli snapshot, il manifest Android e che i file dell'app siano generati dalla sorgente principale. `npm run test:e2e` è un test browser opzionale e richiede Playwright e Chromium.
+
+### Wear OS
+
+`android/wear` è una companion app autonoma per smartwatch Wear OS (Android 11/API 30 o successivo). Richiede la posizione del watch e una connessione Internet per mostrare temperatura, condizioni correnti, umidità, vento, alba e tramonto. **Apri mappa** passa la posizione a un'app cartografica installata sul watch. La dashboard web completa, i pannelli incorporati e il calcolo dei passaggi satellitari non fanno parte di questa prima versione per smartwatch.
+
+Per compilare soltanto l'APK Wear OS, da `android-app/` eseguire:
+
+```sh
+npm run sync
+cd android
+./gradlew :wear:assembleDebug
+```
+
+Il file generato è `android-app/android/wear/build/outputs/apk/debug/wear-debug.apk`. Per installarlo sul watch si può usare ADB tramite Wi-Fi/debug wireless oppure l'installazione di app da Galaxy Wearable.
 
 ### Icona Android
 
