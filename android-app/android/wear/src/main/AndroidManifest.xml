@@ -3,21 +3,21 @@
     <uses-feature
         android:name="android.hardware.type.watch"
         android:required="true" />
-    <uses-feature
-        android:name="android.hardware.location.gps"
-        android:required="false" />
-
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <application
-        android:theme="@android:style/Theme.Material.NoActionBar"
-        android:label="SkyGuardian"
-        android:icon="@android:drawable/ic_menu_compass"
+        android:theme="@style/AppTheme.NoActionBar"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false">
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
         <activity
-            android:name=".MainActivity"
+            android:name="it.skyguardian.app.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

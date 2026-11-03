@@ -54,6 +54,60 @@
         .dark-map .leaflet-control-attribution {
             filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
         }
+
+        html.wear-app body {
+            padding: 0.65rem !important;
+            font-size: 0.875rem;
+        }
+        html.wear-app .max-w-7xl {
+            width: 100%;
+            margin: 0;
+            gap: 0.7rem;
+        }
+        html.wear-app .max-w-7xl > .grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+            margin-top: 0;
+        }
+        html.wear-app .max-w-7xl > #sectionCommerciali,
+        html.wear-app #sectionSimulatore,
+        html.wear-app #lunarCalendarPanel,
+        html.wear-app #sectionMeteoblue,
+        html.wear-app #sectionLightPollution,
+        html.wear-app #sectionAltriModelli,
+        html.wear-app #sectionSatellites,
+        html.wear-app #sectionLiveStations {
+            display: none !important;
+        }
+        html.wear-app .max-w-7xl > details > summary {
+            padding: 0.75rem !important;
+            gap: 0.5rem;
+        }
+        html.wear-app .max-w-7xl > details > summary h1,
+        html.wear-app .max-w-7xl > .grid > details > summary h2 {
+            font-size: 1rem;
+            line-height: 1.35;
+        }
+        html.wear-app .px-6 {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        html.wear-app .pb-6 {
+            padding-bottom: 0.75rem !important;
+        }
+        html.wear-app #snapshotControls {
+            font-size: 0.75rem;
+            overflow-wrap: anywhere;
+        }
+        html.wear-app #snapshotControls button {
+            max-width: 100%;
+            white-space: normal;
+        }
+        html.wear-app #openMeteoData,
+        html.wear-app #astroData {
+            overflow-wrap: anywhere;
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 p-6 font-sans antialiased" onload="initDashboard()">

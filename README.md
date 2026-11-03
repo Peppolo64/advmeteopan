@@ -8,7 +8,7 @@ Vercel continua a pubblicare la cartella principale come sito statico. Le config
 
 ## Build APK
 
-Il workflow GitHub Actions `.github/workflows/build-apk.yml` compila l'APK debug per Android e Wear OS automaticamente a ogni push su `main`; è anche avviabile manualmente dalla scheda **Actions**. Alla fine scarica l'artefatto **SkyGuardian-Android-WearOS-apk**, contenente `app-debug.apk` per il telefono e `wear-debug.apk` per gli smartwatch Wear OS.
+Il workflow GitHub Actions `.github/workflows/build-apk.yml` compila entrambi gli APK debug a ogni push su qualsiasi branch; è anche avviabile manualmente dalla scheda **Actions**. Pubblica due artefatti distinti: **SkyGuardian-Android-apk** (`app-debug.apk`) e **SkyGuardian-WearOS-apk** (`wear-debug.apk`).
 
 Per creare l'APK in locale servono Node.js 18+, Java 17 e Android SDK:
 
@@ -16,10 +16,8 @@ Per creare l'APK in locale servono Node.js 18+, Java 17 e Android SDK:
 cd android-app
 npm ci
 npm test
-npm run build
 npx cap add android   # solo la prima volta
-npx cap sync android
-node scripts/harden-manifest.js
+npm run sync
 cd android
 ./gradlew :app:assembleDebug :wear:assembleDebug
 ```
@@ -28,7 +26,9 @@ cd android
 
 ### Wear OS
 
-`android/wear` è una companion app autonoma per smartwatch Wear OS (Android 11/API 30 o successivo). Richiede la posizione del watch e una connessione Internet per mostrare temperatura, condizioni correnti, umidità, vento, alba e tramonto. **Apri mappa** passa la posizione a un'app cartografica installata sul watch. La dashboard web completa, i pannelli incorporati e il calcolo dei passaggi satellitari non fanno parte di questa prima versione per smartwatch.
+`android/wear` è una build autonoma della dashboard Capacitor per smartwatch Wear OS (Android 11/API 30 o successivo). Sul watch il **Pannello di Controllo** mantiene tutti i controlli disponibili nell'app Android; **Open-Meteo** e **Sole e Luna** sono aperti all'avvio, disposti in colonna e ottimizzati per il display circolare. Gli altri pannelli sono nascosti soltanto nella versione watch: l'APK Android del telefono non viene modificato.
+
+La cattura e la consultazione degli snapshot offline usano gli stessi moduli JavaScript e il plugin nativo `OfflineWebCache` dell'app Android. Lo snapshot salva i dati dei pannelli aperti: sul watch Open-Meteo e Sole e Luna sono aperti per impostazione predefinita. Il dato Open-Meteo viene conservato per la consultazione offline e Sole e Luna viene ricalcolato localmente da coordinate e data.
 
 Per compilare soltanto l'APK Wear OS, da `android-app/` eseguire:
 

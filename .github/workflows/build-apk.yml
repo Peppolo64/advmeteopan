@@ -1,9 +1,8 @@
-name: Build APK
+name: Build Android and Wear OS APKs
 
 on:
-  workflow_dispatch:        # avvio manuale dal tab "Actions"
+  workflow_dispatch:
   push:
-    branches: [main]
 
 jobs:
   apk:
@@ -36,6 +35,7 @@ jobs:
         run: |
           [ -d android ] || npx cap add android
           npx cap sync android
+          node scripts/build-wear.js
 
       - name: Rafforza il manifest (niente backup, niente traffico in chiaro)
         run: node scripts/harden-manifest.js
@@ -64,7 +64,12 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SkyGuardian-Android-WearOS-apk
-          path: |
-            android-app/android/app/build/outputs/apk/debug/app-debug.apk
-            android-app/android/wear/build/outputs/apk/debug/wear-debug.apk
+          name: SkyGuardian-Android-apk
+          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyGuardian-WearOS-apk
+          path: android-app/android/wear/build/outputs/apk/debug/wear-debug.apk
+          if-no-files-found: error

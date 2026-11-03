@@ -209,12 +209,37 @@ assert(
   apkWorkflow.includes('run: ./android/gradlew -p android :wear:assembleDebug --no-daemon'),
   'il workflow APK deve compilare anche il modulo Wear OS'
 );
+assert(/^\s*push:\s*$/m.test(apkWorkflow), 'il workflow deve generare gli APK a ogni push, non solo su main');
+assert(apkWorkflow.includes('name: SkyGuardian-Android-apk'), 'l’APK telefono deve essere pubblicato come artefatto separato');
+assert(apkWorkflow.includes('name: SkyGuardian-WearOS-apk'), 'l’APK Wear OS deve essere pubblicato come artefatto separato');
+assert(apkWorkflow.includes('android/app/build/outputs/apk/debug/app-debug.apk'), 'il workflow deve caricare l’APK telefono');
+assert(apkWorkflow.includes('android/wear/build/outputs/apk/debug/wear-debug.apk'), 'il workflow deve caricare l’APK watch');
+assert(apkWorkflow.includes('node scripts/build-wear.js'), 'il workflow deve generare gli asset Wear OS prima della build');
 const wearManifest = fs.readFileSync(
   path.join(root, 'android', 'wear', 'src', 'main', 'AndroidManifest.xml'),
   'utf8'
 );
 assert(wearManifest.includes('android.hardware.type.watch'), 'il manifest Wear OS deve dichiarare il supporto watch');
-assert(wearManifest.includes('android.permission.ACCESS_COARSE_LOCATION'), 'l’app watch deve poter usare la posizione approssimativa');
+assert(wearManifest.includes('android.permission.INTERNET'), 'l’app watch deve poter caricare dati meteo');
+assert(wearManifest.includes('it.skyguardian.app.MainActivity'), 'Wear OS deve riusare l’attività Capacitor con gli snapshot offline');
+assert(wearManifest.includes('android:allowBackup="false"'), 'i dati snapshot sul watch non devono essere inclusi nei backup');
+const wearGradle = fs.readFileSync(path.join(root, 'android', 'wear', 'build.gradle'), 'utf8');
+assert(wearGradle.includes("java.srcDirs += '../app/src/main/java'"), 'Wear OS deve riutilizzare i plugin nativi dell’app Android');
+assert(
+  html.includes('html.wear-app .max-w-7xl > #sectionCommerciali'),
+  'la UI watch deve nascondere i pannelli non richiesti'
+);
+assert(html.includes('html.wear-app #snapshotControls'), 'gli snapshot devono avere un layout ottimizzato per il watch');
+assert(html.includes('id="sectionOpenMeteo"'), 'la UI watch deve includere Open-Meteo');
+assert(html.includes('id="sectionSoleLuna"'), 'la UI watch deve includere Sole e Luna');
+const wearBuilder = fs.readFileSync(path.join(__dirname, 'build-wear.js'), 'utf8');
+assert(
+  wearBuilder.includes('wear-app')
+    && wearBuilder.includes('sectionOpenMeteo')
+    && wearBuilder.includes('sectionSoleLuna')
+    && wearBuilder.includes('it.skyguardian.wear'),
+  'il generatore deve attivare il layout watch senza cambiare l’APK Android'
+);
 const mainActivity = fs.readFileSync(
   path.join(root, 'android', 'app', 'src', 'main', 'java', 'it', 'skyguardian', 'app', 'MainActivity.java'),
   'utf8'
