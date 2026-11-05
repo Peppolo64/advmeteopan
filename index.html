@@ -37,6 +37,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="snapshot.js"></script>
     <script src="tilestore.js"></script>
+    <script src="ephemeris.js"></script>
 
     <style>
         html:not(.native-app) #snapshotModeBanner,
@@ -77,6 +78,7 @@
         html.wear-app #sectionLightPollution,
         html.wear-app #sectionAltriModelli,
         html.wear-app #sectionSatellites,
+        html.wear-app #sectionEffemeridi,
         html.wear-app #sectionLiveStations {
             display: none !important;
         }
@@ -120,6 +122,44 @@
             outline: 2px solid #60a5fa;
             outline-offset: 1px;
         }
+        /* Effemeridi 3D */
+        #ephViewer {
+            aspect-ratio: 1 / 1;
+            max-height: 78vh;
+            touch-action: none;
+            background: radial-gradient(circle at 50% 42%, #1e293b 0%, #0f172a 55%, #020617 100%);
+        }
+        #ephViewer.eph-camera { aspect-ratio: 3 / 4; background: #000; }
+        #ephCanvas, #ephTimeline { touch-action: none; }
+        #ephCanvas { cursor: grab; }
+        #ephCanvas:active { cursor: grabbing; }
+        #ephViewer.eph-camera #ephCanvas { cursor: default; }
+        .eph-layer-btn {
+            flex: 1 1 0;
+            min-height: 26px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            padding: 2px 0;
+            color: var(--eph-color);
+            opacity: 0.4;
+            border-left: 3px solid transparent;
+            font-size: 8.5px;
+            line-height: 1;
+            font-weight: 600;
+            transition: opacity 120ms ease, background-color 120ms ease, filter 120ms ease;
+        }
+        .eph-layer-btn span { color: #cbd5e1; white-space: nowrap; }
+        .eph-layer-btn.is-on {
+            opacity: 1;
+            background: rgba(148, 163, 184, 0.12);
+            background: color-mix(in srgb, var(--eph-color) 20%, transparent);
+            border-left-color: var(--eph-color);
+        }
+        .eph-layer-btn:active { filter: brightness(0.8); }
+        .eph-event-on { background: rgba(59, 130, 246, 0.18); border-color: rgba(96, 165, 250, 0.65) !important; }
         /* Feedback visivo al click sui pulsanti del Pannello di Controllo */
         #controlPanel button {
             transition: filter 120ms ease, transform 120ms ease, background-color 150ms ease;
@@ -612,6 +652,75 @@
             </div>
         </details>
 
+        <details id="sectionEffemeridi" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" ontoggle="handleEphemerisToggle()">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">🔭 Effemeridi 3D</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="px-3 sm:px-6 pb-6 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 rounded-lg border border-slate-700 px-4 py-3">
+                    <div class="min-w-0">
+                        <div id="ephPlaceLabel" class="text-sm font-semibold text-white">Località del Pannello di Controllo</div>
+                        <div id="ephCoordsLabel" class="text-xs font-mono text-slate-400">--</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="ephDeviceBtn" type="button" onclick="ephemerisUseDevice()" class="text-xs px-3 py-1.5 rounded border border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600 transition">📍 Usa coordinate dispositivo</button>
+                        <button id="ephPanelBtn" type="button" onclick="ephemerisUsePanel()" class="hidden text-xs px-3 py-1.5 rounded border border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600 transition">↩ Coordinate del pannello</button>
+                    </div>
+                </div>
+
+                <div class="flex justify-center">
+                    <div class="inline-flex bg-slate-900/70 border border-slate-700 rounded-full p-1 gap-1" role="group" aria-label="Modalità di visualizzazione">
+                        <button type="button" data-eph-mode="manual" class="px-4 py-1.5 rounded-full text-sm font-semibold transition disabled:opacity-40">✋ A mano</button>
+                        <button type="button" data-eph-mode="camera" class="px-4 py-1.5 rounded-full text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed">📷 Fotocamera</button>
+                    </div>
+                </div>
+                <div id="ephStatus" class="text-xs text-center text-slate-400 min-h-[1rem]"></div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+                    <div class="lg:col-span-2 space-y-3">
+                        <div class="flex gap-2 items-stretch">
+                            <div id="ephViewer" class="relative flex-1 min-w-0 rounded-lg overflow-hidden border border-slate-700">
+                                <video id="ephVideo" playsinline muted autoplay class="absolute inset-0 w-full h-full object-cover hidden"></video>
+                                <canvas id="ephCanvas" class="absolute inset-0 w-full h-full block"></canvas>
+                                <div id="ephViewTools" class="absolute top-2 left-2 flex gap-1">
+                                    <button id="ephResetView" type="button" title="Vista iniziale" class="w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-sm hover:bg-slate-700">⟲</button>
+                                    <button id="ephTopView" type="button" title="Vista dall'alto (Nord in alto)" class="w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-sm hover:bg-slate-700">⊙</button>
+                                </div>
+                                <div id="ephPointing" class="absolute top-2 right-2 text-[11px] font-mono text-white bg-slate-900/60 rounded px-2 py-0.5 empty:hidden"></div>
+                                <div id="ephReadout" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[11px] font-mono px-2 py-1 bg-gradient-to-t from-slate-950/80 to-transparent pointer-events-none"></div>
+                            </div>
+                            <div id="ephLayerBar" class="flex flex-col w-12 shrink-0 rounded-lg overflow-hidden border border-slate-700 bg-slate-900/70" aria-label="Livelli"></div>
+                        </div>
+                        <div class="bg-slate-900/70 border border-slate-700 rounded-lg p-2 space-y-1">
+                            <div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
+                                <button id="ephScaleBtn" type="button" title="Intervallo del cursore: 24 ore, 1 ora o 365 giorni" class="px-2.5 py-0.5 rounded-full border border-slate-500 text-xs font-bold text-white hover:bg-slate-700 transition">24h</button>
+                                <button id="ephPrev" type="button" title="Indietro" class="px-2 text-slate-300 hover:text-white text-lg leading-none">‹</button>
+                                <span id="ephYear" class="font-semibold text-slate-300">----</span>
+                                <label class="relative cursor-pointer px-2 py-0.5 rounded hover:bg-slate-700 text-white font-semibold" title="Cambia data">
+                                    <span id="ephDateLabel">--</span>
+                                    <input id="ephDateInput" type="date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onclick="try { this.showPicker(); } catch (e) {}">
+                                </label>
+                                <label class="relative cursor-pointer px-2 py-0.5 rounded hover:bg-slate-700 text-white font-mono font-semibold" title="Cambia ora">
+                                    <span id="ephTimeLabel">--:--</span>
+                                    <input id="ephTimeInput" type="time" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onclick="try { this.showPicker(); } catch (e) {}">
+                                </label>
+                                <button id="ephNext" type="button" title="Avanti" class="px-2 text-slate-300 hover:text-white text-lg leading-none">›</button>
+                                <button type="button" onclick="ephemerisNow()" title="Torna alla data del Pannello di Controllo e all'ora attuale" class="ml-auto w-7 h-7 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-700">🕘</button>
+                            </div>
+                            <canvas id="ephTimeline" class="w-full h-20 block rounded cursor-ew-resize"></canvas>
+                            <div id="ephNearEvent" class="text-[11px] text-amber-200 text-center min-h-[1rem]"></div>
+                        </div>
+                    </div>
+                    <div id="ephEvents" class="text-sm bg-slate-900/40 rounded-lg border border-slate-700 p-2 lg:max-h-[880px] overflow-y-auto"></div>
+                </div>
+            </div>
+        </details>
+
     </div>
 
     <script>
@@ -955,6 +1064,9 @@
                 case 'sectionLiveStations':
                     updateLiveStations(lat, lon);
                     break;
+                case 'sectionEffemeridi':
+                    updateEphemeris(lat, lon, dateStr, snapMode ? snapSection('sectionEffemeridi') : null);
+                    break;
             }
         }
 
@@ -962,7 +1074,7 @@
             const allSectionIds = [
                 'sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna',
                 'lunarCalendarPanel', 'sectionMeteoblue', 'sectionLightPollution', 'sectionAltriModelli',
-                'sectionSatellites', 'sectionLiveStations'
+                'sectionSatellites', 'sectionLiveStations', 'sectionEffemeridi'
             ];
             allSectionIds.forEach(id => {
                 if (isSectionOpen(id)) {
@@ -2301,11 +2413,111 @@ function renderPassesTable(passes) {
 
 
         // ==========================================
+        // EFFEMERIDI 3D (ephemeris.js; Three.js caricato solo alla prima apertura del pannello)
+        // ==========================================
+        const THREE_SRC = 'https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js';
+        const THREE_SRI = 'sha384-RRHfJ6w1mTlKUBMYT/hvnRiOzEB/vyRV3DrQOseb6oYfvaZSfdd0byS4bHps0k2R';
+        let threeLoader = null;
+        let ephView = null;
+        let ephViewLoading = null;
+
+        function loadThree() {
+            if (window.THREE) return Promise.resolve(window.THREE);
+            if (threeLoader) return threeLoader;
+            threeLoader = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = THREE_SRC;
+                s.integrity = THREE_SRI;
+                if (/^https:/.test(THREE_SRC)) s.crossOrigin = 'anonymous';
+                s.onload = () => window.THREE ? resolve(window.THREE) : reject(new Error('Three.js non disponibile'));
+                s.onerror = () => { threeLoader = null; s.remove(); reject(new Error('impossibile scaricare il motore 3D (sei offline?)')); };
+                document.head.appendChild(s);
+            });
+            return threeLoader;
+        }
+
+        function ensureEphemerisView() {
+            if (ephView) return Promise.resolve(ephView);
+            if (ephViewLoading) return ephViewLoading;
+            const $ = id => document.getElementById(id);
+            $('ephStatus').textContent = 'Caricamento del motore 3D…';
+            ephViewLoading = loadThree().then(THREE => {
+                ephView = SkyEphemeris.createView({ THREE, SunCalc, elements: {
+                    viewer: $('ephViewer'), canvas: $('ephCanvas'), video: $('ephVideo'), layerBar: $('ephLayerBar'),
+                    timeline: $('ephTimeline'), events: $('ephEvents'), status: $('ephStatus'), readout: $('ephReadout'),
+                    pointing: $('ephPointing'), nearEvent: $('ephNearEvent'), place: $('ephPlaceLabel'), coords: $('ephCoordsLabel'),
+                    deviceBtn: $('ephDeviceBtn'), panelBtn: $('ephPanelBtn'), viewTools: $('ephViewTools'),
+                    modeButtons: Array.from(document.querySelectorAll('[data-eph-mode]')),
+                    resetViewBtn: $('ephResetView'), topViewBtn: $('ephTopView'), scaleBtn: $('ephScaleBtn'),
+                    prevBtn: $('ephPrev'), nextBtn: $('ephNext'), yearLabel: $('ephYear'), dateLabel: $('ephDateLabel'),
+                    timeLabel: $('ephTimeLabel'), dateInput: $('ephDateInput'), timeInput: $('ephTimeInput')
+                }});
+                $('ephStatus').textContent = '';
+                return ephView;
+            }).finally(() => { ephViewLoading = null; });
+            return ephViewLoading;
+        }
+
+        // Coordinate e data del Pannello di Controllo (o lo stato salvato nello snapshot)
+        async function updateEphemeris(lat, lon, dateStr, snap) {
+            try {
+                const view = await ensureEphemerisView();
+                view.setActive(isSectionOpen('sectionEffemeridi') && document.visibilityState !== 'hidden');
+                view.setLocation(lat, lon, 'panel');
+                if (snap && isFinite(snap.t)) view.applyState(snap);
+                else view.setDate(dateStr);
+            } catch (error) {
+                console.error('Effemeridi 3D:', error);
+                const webgl = /WebGL/i.test(String(error && error.message));
+                document.getElementById('ephStatus').textContent = webgl
+                    ? '⚠️ Questo dispositivo/browser non supporta la grafica 3D (WebGL).'
+                    : `⚠️ Effemeridi 3D non disponibili: ${error.message}`;
+            }
+        }
+
+        function handleEphemerisToggle() {
+            if (!isSectionOpen('sectionEffemeridi')) {
+                if (ephView) ephView.setActive(false);   // chiude anche fotocamera e sensori
+                return;
+            }
+            if (ephView) ephView.setActive(true);
+            handleSectionToggle('sectionEffemeridi');
+        }
+
+        function ephemerisUseDevice() {
+            const status = document.getElementById('ephStatus');
+            if (!navigator.geolocation) { status.textContent = '📍 Geolocalizzazione non disponibile su questo dispositivo.'; return; }
+            status.textContent = '📍 Rilevamento della posizione…';
+            navigator.geolocation.getCurrentPosition(async pos => {
+                const view = await ensureEphemerisView();
+                view.setLocation(pos.coords.latitude, pos.coords.longitude, 'device');
+                status.textContent = `📍 Posizione del dispositivo (precisione ±${Math.round(pos.coords.accuracy)} m). Il resto della dashboard resta sulla località del pannello.`;
+            }, err => {
+                status.textContent = err.code === 1 ? '📍 Permesso di posizione negato.' : '📍 Posizione non disponibile, riprova all\'aperto.';
+            }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+        }
+
+        function ephemerisUsePanel() {
+            if (!ephView || currentLat === null) return;
+            ephView.setLocation(currentLat, currentLon, 'panel');
+            document.getElementById('ephStatus').textContent = '';
+        }
+
+        function ephemerisNow() {
+            if (ephView) ephView.setDate(currentDateStr || localDateStr(new Date()));
+        }
+
+        // In secondo piano niente rendering, fotocamera e sensori
+        document.addEventListener('visibilitychange', () => {
+            if (ephView) ephView.setActive(document.visibilityState === 'visible' && isSectionOpen('sectionEffemeridi'));
+        });
+
+        // ==========================================
         // SNAPSHOT OFFLINE 48h (storage: snapshot.js, tile mappa: tilestore.js)
         // Le risposte GET intercettate durante la cattura vengono archiviate per ID snapshot su Android.
         // Consultazione = solo su richiesta dell'utente.
         // ==========================================
-        const SNAP_DATA_SECTIONS = ['sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna', 'lunarCalendarPanel', 'sectionSimulatore', 'sectionSatellites'];
+        const SNAP_DATA_SECTIONS = ['sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna', 'lunarCalendarPanel', 'sectionSimulatore', 'sectionSatellites', 'sectionEffemeridi'];
         const SNAP_IFRAME_SECTIONS = ['sectionMeteoblue', 'sectionLightPollution', 'sectionAltriModelli', 'sectionLiveStations'];
         const SNAP_ALL_SECTIONS = SNAP_DATA_SECTIONS.concat(SNAP_IFRAME_SECTIONS);
         const SNAP_IFRAME_HOSTS = ['sectionCommerciali'].concat(SNAP_IFRAME_SECTIONS);   // sezioni che contengono iframe
@@ -2313,7 +2525,7 @@ function renderPassesTable(passes) {
             sectionCommerciali: 'Siti commerciali', sectionOpenMeteo: 'Open-Meteo', sectionSoleLuna: 'Sole e Luna',
             lunarCalendarPanel: 'Calendario lunare', sectionSimulatore: 'Mappa solare/lunare', sectionSatellites: 'Satelliti',
             sectionMeteoblue: 'Meteoblue', sectionLightPollution: 'Inquinamento luminoso', sectionAltriModelli: 'Altri modelli',
-            sectionLiveStations: 'Stazioni live'
+            sectionLiveStations: 'Stazioni live', sectionEffemeridi: 'Effemeridi 3D'
         };
         const SIM_TILE_LAYERS = {
             osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
@@ -2632,6 +2844,7 @@ function renderPassesTable(passes) {
                 else skipped.push('Open-Meteo (nessun dato caricato)');
             }
             if (open('sectionSoleLuna')) sections.sectionSoleLuna = {};         // calcolo locale da coordinate + data
+            if (open('sectionEffemeridi')) sections.sectionEffemeridi = ephView ? ephView.getState() : {};   // calcolo locale: livelli, istante, vista
             if (open('lunarCalendarPanel')) sections.lunarCalendarPanel = {};   // idem
             if (open('sectionSimulatore') && simMap) {
                 const c = simMap.getCenter();

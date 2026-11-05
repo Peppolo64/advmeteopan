@@ -29,6 +29,10 @@ const replacements = [
     '<script src="vendor/satellite.min.js"></script>',
   ],
   [
+    "const THREE_SRC = 'https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js';",
+    "const THREE_SRC = 'vendor/three.min.js';",
+  ],
+  [
     '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">',
     '<link rel="stylesheet" href="vendor/leaflet/leaflet.css">',
   ],
@@ -42,7 +46,7 @@ for (const [from, to] of replacements) html = replaceOnce(html, from, to);
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, html);
-for (const name of ['snapshot.js', 'tilestore.js']) {
+for (const name of ['snapshot.js', 'tilestore.js', 'ephemeris.js']) {
   fs.copyFileSync(path.join(repoRoot, name), path.join(appRoot, 'www', name));
 }
 console.log('www/index.html generato da index.html; supporto snapshot copiato.');

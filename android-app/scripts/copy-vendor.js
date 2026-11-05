@@ -19,6 +19,7 @@ fs.mkdirSync(path.join(out, 'leaflet'), { recursive: true });
 
 fs.copyFileSync(firstExisting(['suncalc/suncalc.js']), path.join(out, 'suncalc.js'));
 fs.copyFileSync(firstExisting(['satellite.js/dist/satellite.min.js', 'satellite.js/dist/satellite.js']), path.join(out, 'satellite.min.js'));
+fs.copyFileSync(firstExisting(['three/build/three.min.js']), path.join(out, 'three.min.js'));
 fs.copyFileSync(firstExisting(['leaflet/dist/leaflet.js']), path.join(out, 'leaflet', 'leaflet.js'));
 fs.copyFileSync(firstExisting(['leaflet/dist/leaflet.css']), path.join(out, 'leaflet', 'leaflet.css'));
 fs.cpSync(firstExisting(['leaflet/dist/images']), path.join(out, 'leaflet', 'images'), { recursive: true });

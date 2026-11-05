@@ -18,10 +18,13 @@ for (const localPath of [
   'vendor/leaflet/leaflet.js',
   'snapshot.js',
   'tilestore.js',
+  'ephemeris.js',
+  'vendor/three.min.js',
 ]) {
   assert(html.includes(localPath) || fs.existsSync(path.join(root, 'www', localPath)), `asset mancante: ${localPath}`);
 }
 assert(!html.includes('https://cdn.tailwindcss.com'), 'Tailwind deve essere locale nell’app');
+assert(!html.includes('cdn.jsdelivr.net/npm/three@'), 'Three.js deve essere locale nell’app (offline)');
 assert(html.includes('html:not(.native-app) #snapshotControls'), 'i controlli snapshot devono essere nascosti sul sito');
 assert(html.includes('if (isNativeApp) initSnapshots();'), 'la manutenzione degli snapshot deve essere limitata all’app');
 

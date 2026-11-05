@@ -2,6 +2,17 @@
 
 `index.html` è l'unica sorgente della pagina: viene pubblicata da Vercel e usata anche per creare l'APK. La build Android genera `android-app/www/index.html` partendo da questo file, sostituendo le CDN con copie locali delle librerie. I moduli `snapshot.js` e `tilestore.js` sono condivisi; i controlli e la modalità snapshot vengono attivati solo nell'app Capacitor.
 
+## Effemeridi 3D
+
+Pannello in fondo alla dashboard (`ephemeris.js`, grafica con Three.js 0.149). Mostra la sfera celeste completa con griglia azimutale per le coordinate del Pannello di Controllo, oppure per la posizione del dispositivo (tasto «Usa coordinate dispositivo», vale solo per questo pannello fino al prossimo «Aggiorna»).
+
+- **Livelli** (barra a destra): posizione e traiettoria del Sole, ora d'oro, ora blu, crepuscoli civile/nautico/astronomico (spicchi all'orizzonte), posizione e traiettoria della Luna, sorgere/tramonto e posizione della Via Lattea.
+- **Cursore del tempo**: 24 ore, 1 ora o 365 giorni (tasto `24h`). Parte dalla data del pannello all'ora corrente; data e ora si cambiano toccandole. Gli eventi vicini al cursore si evidenziano nell'elenco.
+- **A mano**: trascina per ruotare, pizzica o usa la rotella per lo zoom, ⊙ per la vista dall'alto.
+- **Fotocamera**: vista dall'interno della sfera sopra l'immagine della fotocamera, guidata da giroscopio e bussola (telefoni e tablet, sito su HTTPS e app Android).
+
+Tutto è calcolato in locale (SunCalc + formule standard per la Via Lattea): funziona offline e entra negli snapshot. Sul sito Three.js viene scaricato dal CDN solo all'apertura del pannello; nell'app è incluso in `www/vendor`.
+
 ## Deploy web
 
 Vercel continua a pubblicare la cartella principale come sito statico. Le configurazioni, dipendenze e risorse generate per Android si trovano in `android-app/` e sono escluse dal deploy tramite `.vercelignore`.
