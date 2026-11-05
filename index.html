@@ -108,6 +108,13 @@
         html.wear-app #astroData {
             overflow-wrap: anywhere;
         }
+        /* Radar satelliti: si adatta alla larghezza del pannello (max 420px), sempre quadrato */
+        #skyRadarCanvas {
+            width: 100%;
+            max-width: 420px;
+            height: auto;
+            aspect-ratio: 1 / 1;
+        }
         /* Feedback visivo al click sui pulsanti del Pannello di Controllo */
         #controlPanel button {
             transition: filter 120ms ease, transform 120ms ease, background-color 150ms ease;
@@ -569,7 +576,7 @@
                         </div>
                     </div>
                     <canvas id="skyRadarCanvas" width="420" height="420" class="mx-auto block"></canvas>
-                    <p class="text-[11px] text-slate-500 text-center mt-2">Passa il mouse su una riga della tabella sopra per evidenziare la traiettoria corrispondente.</p>
+                    <p class="text-[11px] text-slate-500 text-center mt-2">Passa il mouse (o tocca) una riga della tabella sopra per evidenziare la traiettoria corrispondente.</p>
                 </div>
             </div>
         </details>
@@ -1621,12 +1628,20 @@ async function loadSatelliteGroup(group) {
 // ==========================================
 // RADAR DEL CIELO (traiettorie polari con etichette)
 // ==========================================
+let lastRadarHighlight = null;
 function drawSkyRadar(passes, highlightIdx = null) {
     const canvas = document.getElementById('skyRadarCanvas');
     if (!canvas) return;
+    lastRadarHighlight = highlightIdx;
+    // Il canvas segue la larghezza mostrata (CSS, max 420px): coordinate in px CSS, nitido sugli schermi ad alta densità
+    const size = Math.min(420, canvas.clientWidth || 420);
+    const dpr = window.devicePixelRatio || 1;
+    const px = Math.round(size * dpr);
+    if (canvas.width !== px || canvas.height !== px) { canvas.width = px; canvas.height = px; }
     const ctx = canvas.getContext('2d');
-    const cx = canvas.width / 2, cy = canvas.height / 2, R = 170;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cx = size / 2, cy = size / 2, R = Math.max(40, size / 2 - 40);
+    ctx.clearRect(0, 0, size, size);
 
     ctx.strokeStyle = '#475569';
     ctx.font = '10px sans-serif';
@@ -1677,12 +1692,24 @@ function drawSkyRadar(passes, highlightIdx = null) {
             const label = `${p.name} · ${p.start.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}${magTxt}`;
             ctx.font = '10px sans-serif';
             ctx.fillStyle = '#e2e8f0';
-            const offsetX = startPt.x > cx ? 6 : -ctx.measureText(label).width - 6;
-            ctx.fillText(label, startPt.x + offsetX, startPt.y - 6);
+            const w = ctx.measureText(label).width;
+            const lx = startPt.x > cx ? startPt.x + 6 : startPt.x - w - 6;
+            // Tiene l'etichetta dentro il canvas anche sugli schermi stretti
+            ctx.fillText(label, Math.max(2, Math.min(size - w - 2, lx)), Math.max(10, startPt.y - 6));
         }
         ctx.globalAlpha = 1;
     });
 }
+
+// Ridisegna il radar quando cambia la larghezza (rotazione schermo, ridimensionamento finestra)
+let radarResizeRaf = 0;
+window.addEventListener('resize', () => {
+    cancelAnimationFrame(radarResizeRaf);
+    radarResizeRaf = requestAnimationFrame(() => {
+        const sec = document.getElementById('sectionSatellites');
+        if (sec && sec.open) drawSkyRadar(lastFilteredPasses, lastRadarHighlight);
+    });
+});
 
 function onTimeWindowChange() {
     if (!lastComputedPasses.length) return;
