@@ -667,8 +667,7 @@
         // ==========================================
         function initDashboard() {
             if (isNativeApp) initSnapshots();
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('dateInput').value = today;
+            document.getElementById('dateInput').value = localDateStr(new Date());
             document.getElementById('presetSelect').value = "38.1157,13.3615";
             loadPreset();
         }
@@ -1758,13 +1757,39 @@ function renderPassesTable(passes) {
             return PRESET_URL_OVERRIDES[`${lat.toFixed(5)},${lon.toFixed(5)}`] || null;
         }
 
-        function updateCityIframes(cityName, overrideUrls = null) {
+        // Data locale del dispositivo in formato YYYY-MM-DD (toISOString darebbe la data UTC).
+        function localDateStr(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // Giorni tra oggi (data locale) e la data del pannello: 0 = oggi, 1 = domani, negativo = passato.
+        function dayOffsetFromToday(dateStr) {
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+            if (!m) return 0;
+            const now = new Date();
+            const target = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+            const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+            return Math.round((target - today) / 86400000);
+        }
+
+        // Suffissi per i giorni successivi a oggi, fino al massimo che ogni sito accetta dall'URL.
+        // Fuori intervallo (oggi, passato o oltre il limite) l'URL resta quello di oggi.
+        // MeteoAM non accetta la data dall'URL: mostra sempre oggi.
+        const COMMERCIAL_DAY_SUFFIX = {
+            url3b: offset => (offset >= 1 && offset <= 6) ? `/${offset}` : '',
+            urlIlMeteo: offset => offset === 1 ? '/domani'
+                : offset === 2 ? '/dopodomani'
+                : (offset >= 3 && offset <= 6) ? `/${offset}` : ''
+        };
+
+        function updateCityIframes(cityName, overrideUrls = null, dateStr = currentDateStr) {
             const slugHyphen = cityName.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
             const slugPlus = cityName.toLowerCase().replace(/ /g, '+').replace(/[^a-z0-9+]/g, '');
             const o = overrideUrls || {};
+            const offset = dayOffsetFromToday(dateStr);
 
-            const url3b = o.url3b || `https://www.3bmeteo.com/meteo/${slugPlus}`;
-            const urlIlMeteo = o.urlIlMeteo || `https://www.ilmeteo.it/meteo/${slugPlus}`;
+            const url3b = (o.url3b || `https://www.3bmeteo.com/meteo/${slugPlus}`) + COMMERCIAL_DAY_SUFFIX.url3b(offset);
+            const urlIlMeteo = (o.urlIlMeteo || `https://www.ilmeteo.it/meteo/${slugPlus}`) + COMMERCIAL_DAY_SUFFIX.urlIlMeteo(offset);
             const urlMeteoAm = o.urlMeteoAm || `https://www.meteoam.it/it/meteo-citta/${slugHyphen}`;
 
             setIframeSrc(document.getElementById('treBMeteoIframe'), url3b);
