@@ -23,10 +23,10 @@ let n = 0;
 async function ok(name, fn) { await fn(); n++; console.log('ok -', name); }
 
 (async () => {
-    await ok('salva e rilegge uno snapshot, validità 24h', () => {
+    await ok('salva e rilegge uno snapshot, validità 48h', () => {
         const s = Snap.create({ storage: fakeStorage(), now: clock });
         const a = s.save({ lat: 38.1157, lon: 13.3615, cityName: 'Palermo', sections: { sectionOpenMeteo: { data: { x: 1 } } } });
-        assert.strictEqual(a.expiresAt - a.createdAt, 24 * HOUR);
+        assert.strictEqual(a.expiresAt - a.createdAt, 48 * HOUR);
         assert.strictEqual(s.list().length, 1);
         assert.strictEqual(s.get(a.id).cityName, 'Palermo');
     });
@@ -39,12 +39,12 @@ async function ok(name, fn) { await fn(); n++; console.log('ok -', name); }
         assert.strictEqual(s.labelFor(b), '38.1157, 13.3615, 22/10 11:10');
     });
 
-    await ok('scade dopo 24h, non viene mai restituito ed è cancellato dallo storage', () => {
+    await ok('scade dopo 48h, non viene mai restituito ed è cancellato dallo storage', () => {
         const st = fakeStorage();
         const s = Snap.create({ storage: st, now: clock });
         const a = s.save({ lat: 1, lon: 2 });
-        t += 24 * HOUR - 1;
-        assert.ok(s.get(a.id), 'a 23h59m59s è ancora valido');
+        t += 48 * HOUR - 1;
+        assert.ok(s.get(a.id), 'a 47h59m59s è ancora valido');
         t += 2;
         assert.strictEqual(s.get(a.id), null);
         assert.strictEqual(Object.keys(JSON.parse(st.getItem('skyguardian.snapshots.v2'))).length, 0);
@@ -85,7 +85,7 @@ async function ok(name, fn) { await fn(); n++; console.log('ok -', name); }
         const b = s.save({ lat: 2, lon: 2 });
         s.remove(a.id);
         assert.deepStrictEqual(removed, [a.id]);
-        t += 25 * HOUR;
+        t += 49 * HOUR;
         assert.strictEqual(s.purge(), 1);
         assert.deepStrictEqual(removed, [a.id, b.id]);
         const c = s.save({ lat: 3, lon: 3 });

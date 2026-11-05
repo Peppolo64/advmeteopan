@@ -120,7 +120,7 @@ def main():
         page.goto(base)
         page.wait_for_timeout(500)
         check('la pagina parte senza errori JS', not errors, errors)
-        check('pulsante "Cattura Snapshot Offline di 24h" presente', 'Cattura Snapshot Offline di 24h' in page.inner_text('#snapshotBtn'))
+        check('pulsante "Cattura Snapshot Offline di 48h" presente', 'Cattura Snapshot Offline di 48h' in page.inner_text('#snapshotBtn'))
         check('nessuna sezione "Snapshot offline" separata', page.query_selector('#sectionSnapshots') is None)
         check('timer di pulizia attivo con app in primo piano', page.evaluate('window.__intervals.size') == 1)
 
@@ -236,7 +236,7 @@ def main():
         check('conferma rifiutata: nulla cambia', [x['id'] for x in snaps()] == before and 'annullata' in status().lower(), status())
         state['dialog'] = 'accept'
 
-        # ------------------------------------------------------------ 7. scadenza 24h
+        # ------------------------------------------------------------ 7. scadenza 48h
         page.evaluate("""() => {
             const k = 'skyguardian.snapshots.v2', o = JSON.parse(localStorage.getItem(k));
             const first = Object.keys(o)[0]; o[first].expiresAt = Date.now() - 1000; localStorage.setItem(k, JSON.stringify(o));
@@ -293,7 +293,7 @@ def main():
         check('cancella tutto: nessuno snapshot', len(snaps()) == 0)
         check('cancella tutto: localStorage e sessionStorage vuoti', page.evaluate('localStorage.length') == 0 and page.evaluate('sessionStorage.length') == 0)
         check('cancella tutto: nessuna tile in IndexedDB', idb_snap_ids() == [], idb_snap_ids())
-        check('cancella tutto: la pagina riparte funzionante', 'Cattura Snapshot Offline di 24h' in page.inner_text('#snapshotBtn'))
+        check('cancella tutto: la pagina riparte funzionante', 'Cattura Snapshot Offline di 48h' in page.inner_text('#snapshotBtn'))
 
         check('nessun errore JS durante tutto il test', not errors, errors)
         browser.close()

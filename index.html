@@ -198,11 +198,11 @@
 
                 <div id="snapshotControls" class="pt-4 border-t border-slate-700 space-y-3">
                     <div class="flex flex-col md:flex-row md:items-center gap-3">
-                        <button id="snapshotBtn" onclick="takeSnapshot24h()" class="bg-amber-600 text-white font-semibold px-4 py-2 rounded hover:bg-amber-500 transition shadow-lg disabled:opacity-60">
-                            📸 Cattura Snapshot Offline di 24h
+                        <button id="snapshotBtn" onclick="takeSnapshot()" class="bg-amber-600 text-white font-semibold px-4 py-2 rounded hover:bg-amber-500 transition shadow-lg disabled:opacity-60">
+                            📸 Cattura Snapshot Offline di 48h
                         </button>
                         <span id="connectionBadge" class="text-xs px-2 py-1 rounded-full border border-slate-600 text-slate-300 w-fit">● --</span>
-                        <div id="snapshotStatus" class="text-xs text-slate-400 md:flex-1">Salva i dati dei pannelli aperti per 24 ore (massimo 5 snapshot). Le pagine iframe vengono archiviate in modo parziale e indipendente per snapshot; alcune risorse potrebbero mancare.</div>
+                        <div id="snapshotStatus" class="text-xs text-slate-400 md:flex-1">Salva i dati dei pannelli aperti per 48 ore (massimo 5 snapshot). Le pagine iframe vengono archiviate in modo parziale e indipendente per snapshot; alcune risorse potrebbero mancare.</div>
                     </div>
                     <div id="snapshotOfflineHint" class="hidden text-xs text-amber-300">📴 Sei offline: tocca «Consulta lo snapshot offline» per aprire i dati salvati.</div>
                     <div id="snapshotList" class="space-y-2"></div>
@@ -849,51 +849,11 @@
                 alert("Inserisci coordinate e data valide.");
                 return;
             }
-/*
-            updateSunMoon(lat, lon, dateStr);
-            fetchOpenMeteo(lat, lon, dateStr);
-            lunarCalendarDate = new Date(dateStr + 'T12:00:00');
-            renderLunarCalendar();
-            updateCoordinateIframes(lat, lon);
-            updateLightPollution(lat, lon);
 
-            const coordKey = `${lat.toFixed(5)},${lon.toFixed(5)}`;
-            const label = document.getElementById('detectedCityLabel');
-
-            if (coordKey === "37.87548,14.02748") {
-                label.innerHTML = `Località montana rilevata: <strong>Piano Battaglia</strong>`;
-                label.className = "text-sm px-3 py-1 bg-blue-900 text-blue-200 rounded-full border border-blue-700 shadow-inner";
-                updateCityIframes(null, {
-                    url3b: "https://www.3bmeteo.com/meteo/piano+battaglia",
-                    urlIlMeteo: "https://www.ilmeteo.it/meteo/piano+battaglia",
-                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/isnello"
-                });
-                return;
-            }
-            else if (coordKey === "37.79914,15.03950") {
-                label.innerHTML = `Località montana rilevata: <strong>Piano Provenzana</strong>`;
-                label.className = "text-sm px-3 py-1 bg-blue-900 text-blue-200 rounded-full border border-blue-700 shadow-inner";
-                updateCityIframes(null, {
-                    url3b: "https://www.3bmeteo.com/meteo/piano+provenzana",
-                    urlIlMeteo: "https://www.ilmeteo.it/meteo/linguaglossa",
-                    urlMeteoAm: "https://www.meteoam.it/it/meteo-citta/linguaglossa"
-                });
-                return;
-            }
-
-            const cityName = await fetchNearestMunicipality(lat, lon);
-            if (cityName) {
-                updateCityIframes(cityName);
-            } */
-               // Aggiorna stato globale: le sezioni chiuse leggeranno questi valori quando apri
+            // Aggiorna stato globale: le sezioni chiuse leggeranno questi valori quando apri
             currentLat = lat;
             currentLon = lon;
             currentDateStr = dateStr;
-
-            // Rilevamento comune montano (leggero, sempre eseguito per l'etichetta)
-            const coordKey = `${lat.toFixed(5)},${lon.toFixed(5)}`;
-            const label = document.getElementById('detectedCityLabel');
-            // ... [mantieni qui la logica esistente di Piano Battaglia / Piano Provenzana se presente] ...
 
             // Invalida tutto: anche le sezioni chiuse devono ricaricarsi (live o snapshot) alla prossima apertura
             Object.keys(loadedSections).forEach(k => { loadedSections[k] = null; });
@@ -940,10 +900,10 @@
                 case 'sectionCommerciali':
                     if (snapMode) {
                         const cn = snapSection('sectionCommerciali').cityName;
-                        if (cn) updateCityIframes(cn);   // solo per i link: gli iframe diventano segnaposto
+                        if (cn) updateCityIframes(cn, presetUrlOverrides(lat, lon));   // solo per i link: gli iframe diventano segnaposto
                     } else {
                         fetchNearestMunicipality(lat, lon).then(cityName => {
-                            if (cityName) updateCityIframes(cityName);
+                            if (cityName) updateCityIframes(cityName, presetUrlOverrides(lat, lon));
                         });
                     }
                     break;
@@ -1206,7 +1166,7 @@
                 // TRUCCO CDN + SINTASSI CORRETTA: Chiediamo 16 giorni standard + 1 passato.
                 // Usiamo l'esatta nomenclatura (weathercode, windspeed) accettata dal server
                 // URL AGGIORNATO: Chiede anche apparent_temperature, weathercode, precipitation, windspeed_10m e winddirection_10m per ogni ora
-                // Rete se disponibile, altrimenti lo snapshot 24h della stessa località
+                // Rete se disponibile, altrimenti lo snapshot 48h della stessa località
                 const { data } = await getOpenMeteoData(lat, lon);
 
                 // Cerchiamo la data selezionata nel pacchetto scaricato
@@ -1770,21 +1730,34 @@ function renderPassesTable(passes) {
 }
 
 
-        function updateCityIframes(cityName, overrideUrls = null) {
-            let url3b, urlIlMeteo, urlMeteoAm;
-
-            if (overrideUrls) {
-                url3b = overrideUrls.url3b;
-                urlIlMeteo = overrideUrls.urlIlMeteo;
-                urlMeteoAm = overrideUrls.urlMeteoAm;
-            } else {
-                const slugHyphen = cityName.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
-                const slugPlus = cityName.toLowerCase().replace(/ /g, '+').replace(/[^a-z0-9+]/g, '');
-
-                url3b = `https://www.3bmeteo.com/meteo/${slugPlus}`;
-                urlIlMeteo = `https://www.ilmeteo.it/meteo/${slugPlus}`;
-                urlMeteoAm = `https://www.meteoam.it/it/meteo-citta/${slugHyphen}`;
+        // URL fissi per alcune località predefinite (chiave: coordinate del preset a 5 decimali).
+        // Sostituiscono solo i siti indicati: gli altri continuano a usare il comune rilevato.
+        const PRESET_URL_OVERRIDES = {
+            '37.88273,13.37729': {   // Ficuzza (Paese)
+                url3b: 'https://www.3bmeteo.com/meteo/ficuzza'
+            },
+            '37.87548,14.02748': {   // Piano Battaglia
+                url3b: 'https://www.3bmeteo.com/meteo/piano+battaglia',
+                urlIlMeteo: 'https://www.ilmeteo.it/meteo/piano+battaglia'
+            },
+            '37.79914,15.03950': {   // Piano Provenzana
+                url3b: 'https://www.3bmeteo.com/meteo/piano+provenzana'
             }
+        };
+
+        function presetUrlOverrides(lat, lon) {
+            if (!isFinite(lat) || !isFinite(lon)) return null;
+            return PRESET_URL_OVERRIDES[`${lat.toFixed(5)},${lon.toFixed(5)}`] || null;
+        }
+
+        function updateCityIframes(cityName, overrideUrls = null) {
+            const slugHyphen = cityName.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
+            const slugPlus = cityName.toLowerCase().replace(/ /g, '+').replace(/[^a-z0-9+]/g, '');
+            const o = overrideUrls || {};
+
+            const url3b = o.url3b || `https://www.3bmeteo.com/meteo/${slugPlus}`;
+            const urlIlMeteo = o.urlIlMeteo || `https://www.ilmeteo.it/meteo/${slugPlus}`;
+            const urlMeteoAm = o.urlMeteoAm || `https://www.meteoam.it/it/meteo-citta/${slugHyphen}`;
 
             setIframeSrc(document.getElementById('treBMeteoIframe'), url3b);
             setIframeSrc(document.getElementById('ilMeteoIframe'), urlIlMeteo);
@@ -2237,7 +2210,7 @@ function renderPassesTable(passes) {
 
 
         // ==========================================
-        // SNAPSHOT OFFLINE 24h (storage: snapshot.js, tile mappa: tilestore.js)
+        // SNAPSHOT OFFLINE 48h (storage: snapshot.js, tile mappa: tilestore.js)
         // Le risposte GET intercettate durante la cattura vengono archiviate per ID snapshot su Android.
         // Consultazione = solo su richiesta dell'utente.
         // ==========================================
@@ -2624,7 +2597,7 @@ function renderPassesTable(passes) {
             if (b) b.disabled = on;
         }
 
-        async function takeSnapshot24h() {
+        async function takeSnapshot() {
             if (snapshotBusy) return;
             if (activeSnapshotId) {
                 setSnapshotStatus('ℹ️ Stai consultando uno snapshot: esci dallo snapshot prima di catturarne uno nuovo.');
@@ -2945,7 +2918,7 @@ function renderPassesTable(passes) {
             if (hint) hint.classList.toggle('hidden', !(navigator.onLine === false && snaps.length));
 
             if (!snaps.length) {
-                box.innerHTML = '<p class="text-xs text-slate-500 italic">Nessuno snapshot salvato (massimo 5, durata 24 ore).</p>';
+                box.innerHTML = '<p class="text-xs text-slate-500 italic">Nessuno snapshot salvato (massimo 5, durata 48 ore).</p>';
                 return;
             }
             box.innerHTML = snaps.map(s => {

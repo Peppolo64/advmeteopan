@@ -2,7 +2,7 @@
   "name": "skyguardian",
   "version": "1.0.0",
   "private": true,
-  "description": "SkyGuardian - dashboard meteo/astronomia con snapshot offline 24h",
+  "description": "SkyGuardian - dashboard meteo/astronomia con snapshot offline 48h",
   "scripts": {
     "build:css": "tailwindcss -c tailwind.config.js -i src/input.css -o www/vendor/tailwind.css --minify",
     "vendor": "node scripts/copy-vendor.js",

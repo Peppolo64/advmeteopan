@@ -1,8 +1,8 @@
 /*
- * SkyGuardian - Snapshot locali 24h
+ * SkyGuardian - Snapshot locali 48h
  *
  * Uno snapshot è la "fotografia" dei pannelli aperti (con i dati già scaricati) per una località.
- * - Dura 24 ore: dopo la scadenza non viene mai restituito e viene cancellato alla prima occasione
+ * - Dura 48 ore: dopo la scadenza non viene mai restituito e viene cancellato alla prima occasione
  *   (avvio app, ritorno in primo piano, timer a 60 s mentre l'app è in primo piano).
  * - Al massimo 5 alla volta: il sesto richiede di sostituire il più vecchio (decide l'interfaccia).
  * - I dati JSON stanno in localStorage; le tile della mappa stanno in IndexedDB (tilestore.js)
@@ -15,7 +15,7 @@
 
     const KEY = 'skyguardian.snapshots.v2';
     const OLD_KEYS = ['skyguardian.snapshots.v1'];
-    const TTL_MS = 24 * 60 * 60 * 1000;
+    const TTL_MS = 48 * 60 * 60 * 1000;
     const MAX_SNAPSHOTS = 5;
     const MATCH_TOL_DEG = 0.01;           // ~1 km: "stessa località" per il suggerimento offline
 
