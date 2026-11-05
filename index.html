@@ -108,6 +108,14 @@
         html.wear-app #astroData {
             overflow-wrap: anywhere;
         }
+        /* Feedback visivo al click sui pulsanti del Pannello di Controllo */
+        #controlPanel button {
+            transition: filter 120ms ease, transform 120ms ease, background-color 150ms ease;
+        }
+        #controlPanel button:active:not(:disabled) {
+            filter: brightness(0.8);
+            transform: scale(0.96);
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 p-6 font-sans antialiased" onload="initDashboard()">
@@ -126,7 +134,7 @@
 
     <div class="max-w-7xl mx-auto space-y-8">
 
-        <details class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" open>
+        <details id="controlPanel" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group" open>
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
                 <h1 class="text-2xl font-bold text-white mb-0">Pannello di Controllo</h1>
                 <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
