@@ -115,6 +115,11 @@
             height: auto;
             aspect-ratio: 1 / 1;
         }
+        /* Riga dei passaggi satellite selezionata (tocco/click): resta evidenziata sul radar */
+        #satellitePassesList > [data-pinned="1"] {
+            outline: 2px solid #60a5fa;
+            outline-offset: 1px;
+        }
         /* Feedback visivo al click sui pulsanti del Pannello di Controllo */
         #controlPanel button {
             transition: filter 120ms ease, transform 120ms ease, background-color 150ms ease;
@@ -575,8 +580,8 @@
                             </select>
                         </div>
                     </div>
-                    <canvas id="skyRadarCanvas" width="420" height="420" class="mx-auto block"></canvas>
-                    <p class="text-[11px] text-slate-500 text-center mt-2">Passa il mouse (o tocca) una riga della tabella sopra per evidenziare la traiettoria corrispondente.</p>
+                    <canvas id="skyRadarCanvas" width="420" height="420" class="mx-auto block" onclick="pinRadarPass(null)"></canvas>
+                    <p class="text-[11px] text-slate-500 text-center mt-2">Passa il mouse o tocca una riga della tabella sopra per evidenziare la traiettoria corrispondente. Tocca di nuovo la riga (o il radar) per rivederle tutte.</p>
                 </div>
             </div>
         </details>
@@ -1642,6 +1647,8 @@ function drawSkyRadar(passes, highlightIdx = null) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const cx = size / 2, cy = size / 2, R = Math.max(40, size / 2 - 40);
     ctx.clearRect(0, 0, size, size);
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1;   // lo stato del contesto resta dal disegno precedente: senza reset i cerchi si ispessiscono
 
     ctx.strokeStyle = '#475569';
     ctx.font = '10px sans-serif';
@@ -1711,6 +1718,29 @@ window.addEventListener('resize', () => {
     });
 });
 
+// Evidenziazione di un passaggio sul radar.
+// Mouse: hover temporaneo. Tocco/click: selezione fissa (toggle) che resta finché non si tocca di nuovo.
+let pinnedPassIdx = null;
+
+function hoverRadarPass(e, idx) {
+    if (e.pointerType !== 'mouse') return;   // sul touch decide solo il tap (pinRadarPass)
+    drawSkyRadar(lastFilteredPasses, idx === null ? pinnedPassIdx : idx);
+}
+
+function pinRadarPass(idx) {
+    pinnedPassIdx = (idx === null || pinnedPassIdx === idx) ? null : idx;
+    document.querySelectorAll('#satellitePassesList > [data-pass-idx]').forEach(row => {
+        row.dataset.pinned = Number(row.dataset.passIdx) === pinnedPassIdx ? '1' : '0';
+    });
+    drawSkyRadar(lastFilteredPasses, pinnedPassIdx);
+    // Su schermi piccoli il radar sta sotto la tabella: lo porta in vista dopo la selezione
+    const canvas = document.getElementById('skyRadarCanvas');
+    if (pinnedPassIdx !== null && canvas) {
+        const r = canvas.getBoundingClientRect();
+        if (r.top < 0 || r.bottom > window.innerHeight) canvas.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
 function onTimeWindowChange() {
     if (!lastComputedPasses.length) return;
     const slider = document.getElementById('timeWindowSlider');
@@ -1733,6 +1763,7 @@ function renderPassesTable(passes) {
     const colors = ['#f97316', '#22d3ee', '#a3e635', '#e879f9', '#fbbf24', '#60a5fa', '#f472b6', '#4ade80'];
 
     lastFilteredPasses = passes;
+    pinnedPassIdx = null;   // nuova lista: gli indici cambiano
 
     if (passes.length === 0) {
         listEl.innerHTML = '<p class="text-slate-500 italic">Nessun satellite passerà in questa finestra oraria. Cielo libero per la sessione!</p>';
@@ -1748,7 +1779,7 @@ function renderPassesTable(passes) {
         const magInfo = magnitudeLabel(p.peakMag);
         return `
         <div class="flex flex-col gap-1 ${magInfo.bg} p-2 rounded-lg border border-slate-600/50 hover:bg-slate-700/70 transition cursor-pointer"
-             onmouseenter="drawSkyRadar(lastFilteredPasses, ${idx})" onmouseleave="drawSkyRadar(lastFilteredPasses)">
+             data-pass-idx="${idx}" onpointerenter="hoverRadarPass(event, ${idx})" onpointerleave="hoverRadarPass(event, null)" onclick="pinRadarPass(${idx})">
             <div class="flex justify-between items-center">
                 <span class="font-semibold text-white flex items-center">${swatch}${esc(p.name)}</span>
                 <span class="text-[11px] text-slate-400">${dateLabel}</span>
