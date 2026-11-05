@@ -314,15 +314,15 @@
                         float d = uLimit - aMag;
                         if (d < 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
                         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                        gl_PointSize = clamp(2.1 + d * 1.1, 2.1, 16.0) * uPR;
-                        vAlpha = clamp(0.38 + d * 0.5, 0.0, 1.0) * uDim;
+                        gl_PointSize = clamp(2.6 + d * 1.55, 2.6, 22.0) * uPR;
+                        vAlpha = clamp(0.4 + d * 0.45, 0.0, 1.0) * uDim;
                         vColor = aColor;
                     }`,
                 fragmentShader: `varying vec3 vColor; varying float vAlpha;
                     void main(){
                         vec2 p = gl_PointCoord - 0.5; float r2 = dot(p, p) * 4.0;
                         if (r2 > 1.0) discard;
-                        float a = exp(-r2 * 4.5) + 0.25 * exp(-r2 * 1.2);
+                        float a = exp(-r2 * 3.2) + 0.22 * exp(-r2 * 1.0);   // nucleo più largo + alone: niente stelle da 1 pixel
                         gl_FragColor = vec4(vColor * a * vAlpha, 1.0);
                     }`,
             });
