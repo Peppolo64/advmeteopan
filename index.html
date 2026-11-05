@@ -38,6 +38,7 @@
     <script src="snapshot.js"></script>
     <script src="tilestore.js"></script>
     <script src="ephemeris.js"></script>
+    <script src="starmap.js"></script>
 
     <style>
         html:not(.native-app) #snapshotModeBanner,
@@ -79,6 +80,7 @@
         html.wear-app #sectionAltriModelli,
         html.wear-app #sectionSatellites,
         html.wear-app #sectionEffemeridi,
+        html.wear-app #sectionStarMap,
         html.wear-app #sectionLiveStations {
             display: none !important;
         }
@@ -160,6 +162,33 @@
         }
         .eph-layer-btn:active { filter: brightness(0.8); }
         .eph-event-on { background: rgba(59, 130, 246, 0.18); border-color: rgba(96, 165, 250, 0.65) !important; }
+        /* Mappa Stellare */
+        #smViewer { aspect-ratio: 4 / 3; max-height: 78vh; touch-action: none; background: #000; }
+        @media (max-width: 640px) { #smViewer { aspect-ratio: 3 / 4; } }
+        #smOverlay, #smTimeline { touch-action: none; }
+        #smOverlay { cursor: grab; }
+        #smOverlay:active { cursor: grabbing; }
+        #smLayerBar { scrollbar-width: none; }
+        #smLayerBar::-webkit-scrollbar { display: none; }
+        .sm-night { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-45deg) brightness(0.72); }
+        /* Schermo intero (Mappa Stellare ed Effemeridi): riquadro, barra dei livelli e cursore del tempo */
+        body.sg-fs-lock { overflow: hidden; }
+        .sg-fs {
+            position: fixed !important;
+            inset: 0;
+            z-index: 90;
+            margin: 0 !important;
+            padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+            background: #020617;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow: hidden;
+        }
+        .sg-fs > * { margin: 0 !important; flex: 0 0 auto; }
+        .sg-fs > .sg-fs-grow { flex: 1 1 auto; min-height: 0; }
+        .sg-fs #ephViewer, .sg-fs #smViewer { aspect-ratio: auto !important; max-height: none !important; height: 100%; }
+        .sg-fs #ephLayerBar, .sg-fs #smLayerBar { overflow-y: auto; }
         /* Feedback visivo al click sui pulsanti del Pannello di Controllo */
         #controlPanel button {
             transition: filter 120ms ease, transform 120ms ease, background-color 150ms ease;
@@ -652,7 +681,7 @@
             </div>
         </details>
 
-        <details id="sectionEffemeridi" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" ontoggle="handleEphemerisToggle()">
+        <details id="sectionEffemeridi" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleEphemerisToggle()">
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
                 <h2 class="text-xl font-bold text-white mb-0">🔭 Effemeridi 3D</h2>
                 <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
@@ -682,8 +711,8 @@
                 <div id="ephStatus" class="text-xs text-center text-slate-400 min-h-[1rem]"></div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-                    <div class="lg:col-span-2 space-y-3">
-                        <div class="flex gap-2 items-stretch">
+                    <div id="ephStage" class="lg:col-span-2 space-y-3">
+                        <div class="flex gap-2 items-stretch sg-fs-grow">
                             <div id="ephViewer" class="relative flex-1 min-w-0 rounded-lg overflow-hidden border border-slate-700">
                                 <video id="ephVideo" playsinline muted autoplay class="absolute inset-0 w-full h-full object-cover hidden"></video>
                                 <canvas id="ephCanvas" class="absolute inset-0 w-full h-full block"></canvas>
@@ -691,7 +720,8 @@
                                     <button id="ephResetView" type="button" title="Vista iniziale" class="w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-sm hover:bg-slate-700">⟲</button>
                                     <button id="ephTopView" type="button" title="Vista dall'alto (Nord in alto)" class="w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-sm hover:bg-slate-700">⊙</button>
                                 </div>
-                                <div id="ephPointing" class="absolute top-2 right-2 text-[11px] font-mono text-white bg-slate-900/60 rounded px-2 py-0.5 empty:hidden"></div>
+                                <div id="ephPointing" class="absolute top-2 left-1/2 -translate-x-1/2 text-[11px] font-mono text-white bg-slate-900/60 rounded px-2 py-0.5 empty:hidden whitespace-nowrap"></div>
+                                <button type="button" data-fs-target="ephStage" onclick="toggleSkyFullscreen('ephStage')" title="Schermo intero" class="absolute top-2 right-2 w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-sm hover:bg-slate-700">⛶</button>
                                 <div id="ephReadout" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[11px] font-mono px-2 py-1 bg-gradient-to-t from-slate-950/80 to-transparent pointer-events-none"></div>
                             </div>
                             <div id="ephLayerBar" class="flex flex-col w-12 shrink-0 rounded-lg overflow-hidden border border-slate-700 bg-slate-900/70" aria-label="Livelli"></div>
@@ -718,6 +748,78 @@
                     </div>
                     <div id="ephEvents" class="text-sm bg-slate-900/40 rounded-lg border border-slate-700 p-2 lg:max-h-[880px] overflow-y-auto"></div>
                 </div>
+            </div>
+        </details>
+
+        <details id="sectionStarMap" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" ontoggle="handleStarMapToggle()">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">✨ Mappa Stellare</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="px-3 sm:px-6 pb-6 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 rounded-lg border border-slate-700 px-4 py-3">
+                    <div class="min-w-0">
+                        <div id="smPlaceLabel" class="text-sm font-semibold text-white">Località del Pannello di Controllo</div>
+                        <div id="smCoordsLabel" class="text-xs font-mono text-slate-400">--</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="smDeviceBtn" type="button" onclick="starMapUseDevice()" class="text-xs px-3 py-1.5 rounded border border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600 transition">📍 Usa coordinate dispositivo</button>
+                        <button id="smPanelBtn" type="button" onclick="starMapUsePanel()" class="hidden text-xs px-3 py-1.5 rounded border border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600 transition">↩ Coordinate del pannello</button>
+                    </div>
+                </div>
+
+                <div id="smStage" class="space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="inline-flex bg-slate-900/70 border border-slate-700 rounded-full p-1 gap-1" role="group" aria-label="Modalità di navigazione">
+                            <button type="button" data-sm-mode="manual" class="px-4 py-1.5 rounded-full text-sm font-semibold transition disabled:opacity-40">✋ A mano</button>
+                            <button type="button" data-sm-mode="gyro" class="px-4 py-1.5 rounded-full text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed">🧭 Giroscopio</button>
+                        </div>
+                        <div class="relative w-full sm:w-72">
+                            <input id="smSearch" type="search" autocomplete="off" placeholder="Cerca: Vega, Orione, Giove, M31…" class="w-full px-3 py-1.5 text-sm bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <ul id="smSearchList" class="hidden absolute top-full left-0 w-full mt-1 bg-slate-700 border border-slate-600 rounded shadow-2xl z-20 max-h-64 overflow-y-auto text-sm"></ul>
+                        </div>
+                    </div>
+                    <div id="smStatus" class="text-xs text-center text-slate-400 min-h-[1rem]"></div>
+                    <div class="flex gap-2 items-stretch sg-fs-grow">
+                        <div id="smViewer" class="relative flex-1 min-w-0 rounded-lg overflow-hidden border border-slate-700">
+                            <canvas id="smCanvas" class="absolute inset-0 w-full h-full block"></canvas>
+                            <canvas id="smOverlay" class="absolute inset-0 w-full h-full block"></canvas>
+                            <div id="smInfo" class="hidden absolute top-2 left-2 w-[270px] max-w-[calc(100%-3.5rem)] max-h-[calc(100%-3rem)] overflow-y-auto bg-slate-900/90 border border-slate-600 rounded-lg p-3 shadow-xl"></div>
+                            <div class="absolute top-2 right-2 flex flex-col gap-1">
+                                <button type="button" data-fs-target="smStage" onclick="toggleSkyFullscreen('smStage')" title="Schermo intero" class="w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-sm hover:bg-slate-700">⛶</button>
+                                <button id="smZoomIn" type="button" title="Ingrandisci" class="w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-lg leading-none hover:bg-slate-700">+</button>
+                                <button id="smZoomOut" type="button" title="Riduci" class="w-8 h-8 rounded-full bg-slate-900/70 border border-slate-600 text-slate-200 text-lg leading-none hover:bg-slate-700">−</button>
+                            </div>
+                            <div id="smReadout" class="absolute bottom-0 inset-x-0 text-center text-[11px] font-mono text-slate-300 px-2 py-1 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
+                        </div>
+                        <div id="smLayerBar" class="flex flex-col w-12 shrink-0 rounded-lg overflow-y-auto border border-slate-700 bg-slate-900/70" aria-label="Impostazioni della mappa"></div>
+                    </div>
+                    <div class="bg-slate-900/70 border border-slate-700 rounded-lg p-2 space-y-1">
+                        <div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
+                            <button id="smScaleBtn" type="button" title="Intervallo del cursore: 24 ore o 365 giorni" class="px-2.5 py-0.5 rounded-full border border-slate-500 text-xs font-bold text-white hover:bg-slate-700 transition">24h</button>
+                            <button id="smPrev" type="button" title="Indietro" class="px-2 text-slate-300 hover:text-white text-lg leading-none">‹</button>
+                            <span id="smYear" class="font-semibold text-slate-300">----</span>
+                            <label class="relative cursor-pointer px-2 py-0.5 rounded hover:bg-slate-700 text-white font-semibold" title="Cambia data">
+                                <span id="smDateLabel">--</span>
+                                <input id="smDateInput" type="date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onclick="try { this.showPicker(); } catch (e) {}">
+                            </label>
+                            <label class="relative cursor-pointer px-2 py-0.5 rounded hover:bg-slate-700 text-white font-mono font-semibold" title="Cambia ora">
+                                <span id="smTimeLabel">--:--</span>
+                                <input id="smTimeInput" type="time" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onclick="try { this.showPicker(); } catch (e) {}">
+                            </label>
+                            <button id="smNext" type="button" title="Avanti" class="px-2 text-slate-300 hover:text-white text-lg leading-none">›</button>
+                            <button id="smPlay" type="button" title="Fai scorrere il tempo" class="ml-1 w-7 h-7 rounded-full border border-slate-600 text-slate-100 hover:bg-slate-700">▶</button>
+                            <button id="smSpeed" type="button" title="Velocità dello scorrimento" class="px-2 py-0.5 rounded-full border border-slate-600 text-[11px] text-slate-200 hover:bg-slate-700">10 min/s</button>
+                            <button type="button" onclick="starMapNow()" title="Torna alla data del Pannello di Controllo e all'ora attuale" class="ml-auto w-7 h-7 rounded-full border border-slate-600 text-slate-200 hover:bg-slate-700">🕘</button>
+                        </div>
+                        <canvas id="smTimeline" class="w-full h-16 block rounded cursor-ew-resize"></canvas>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-500">Dati: stelle dal catalogo HYG v4.1 (CC BY-SA 4.0, D. Nash / astronexus); costellazioni, Via Lattea e oggetti Messier da d3-celestial (BSD, O. Frohn); pianeti con gli elementi orbitali JPL. Tocca un oggetto per i dettagli.</p>
             </div>
         </details>
 
@@ -1067,6 +1169,9 @@
                 case 'sectionEffemeridi':
                     updateEphemeris(lat, lon, dateStr, snapMode ? snapSection('sectionEffemeridi') : null);
                     break;
+                case 'sectionStarMap':
+                    updateStarMap(lat, lon, dateStr, snapMode ? snapSection('sectionStarMap') : null);
+                    break;
             }
         }
 
@@ -1074,7 +1179,7 @@
             const allSectionIds = [
                 'sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna',
                 'lunarCalendarPanel', 'sectionMeteoblue', 'sectionLightPollution', 'sectionAltriModelli',
-                'sectionSatellites', 'sectionLiveStations', 'sectionEffemeridi'
+                'sectionSatellites', 'sectionLiveStations', 'sectionEffemeridi', 'sectionStarMap'
             ];
             allSectionIds.forEach(id => {
                 if (isSectionOpen(id)) {
@@ -2478,24 +2583,27 @@ function renderPassesTable(passes) {
         function handleEphemerisToggle() {
             if (!isSectionOpen('sectionEffemeridi')) {
                 if (ephView) ephView.setActive(false);   // chiude anche fotocamera e sensori
+                if (sgFullscreenEl && sgFullscreenEl.id === 'ephStage') exitSkyFullscreen();
                 return;
             }
             if (ephView) ephView.setActive(true);
             handleSectionToggle('sectionEffemeridi');
         }
 
-        function ephemerisUseDevice() {
-            const status = document.getElementById('ephStatus');
+        // Posizione GPS del dispositivo per un solo pannello (Effemeridi o Mappa Stellare)
+        function useDevicePosition(statusId, getView) {
+            const status = document.getElementById(statusId);
             if (!navigator.geolocation) { status.textContent = '📍 Geolocalizzazione non disponibile su questo dispositivo.'; return; }
             status.textContent = '📍 Rilevamento della posizione…';
             navigator.geolocation.getCurrentPosition(async pos => {
-                const view = await ensureEphemerisView();
+                const view = await getView();
                 view.setLocation(pos.coords.latitude, pos.coords.longitude, 'device');
                 status.textContent = `📍 Posizione del dispositivo (precisione ±${Math.round(pos.coords.accuracy)} m). Il resto della dashboard resta sulla località del pannello.`;
             }, err => {
                 status.textContent = err.code === 1 ? '📍 Permesso di posizione negato.' : '📍 Posizione non disponibile, riprova all\'aperto.';
             }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
         }
+        function ephemerisUseDevice() { useDevicePosition('ephStatus', ensureEphemerisView); }
 
         function ephemerisUsePanel() {
             if (!ephView || currentLat === null) return;
@@ -2507,17 +2615,132 @@ function renderPassesTable(passes) {
             if (ephView) ephView.setDate(currentDateStr || localDateStr(new Date()));
         }
 
+        // ==========================================
+        // MAPPA STELLARE (starmap.js + skydata.js, caricati solo alla prima apertura del pannello)
+        // ==========================================
+        let smView = null;
+        let smViewLoading = null;
+        let skyDataLoader = null;
+
+        function loadSkyData() {
+            if (window.SkyStarData) return Promise.resolve(window.SkyStarData);
+            if (skyDataLoader) return skyDataLoader;
+            skyDataLoader = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'skydata.js';
+                s.onload = () => window.SkyStarData ? resolve(window.SkyStarData) : reject(new Error('dati stellari non validi'));
+                s.onerror = () => { skyDataLoader = null; s.remove(); reject(new Error('impossibile scaricare il catalogo stellare (sei offline?)')); };
+                document.head.appendChild(s);
+            });
+            return skyDataLoader;
+        }
+
+        function ensureStarMapView() {
+            if (smView) return Promise.resolve(smView);
+            if (smViewLoading) return smViewLoading;
+            const $ = id => document.getElementById(id);
+            $('smStatus').textContent = 'Caricamento del catalogo stellare e del motore 3D…';
+            smViewLoading = Promise.all([loadThree(), loadSkyData()]).then(([THREE, data]) => {
+                smView = SkyStarMap.createView({ THREE, SunCalc, data, elements: {
+                    stage: $('smStage'), viewer: $('smViewer'), canvas: $('smCanvas'), overlay: $('smOverlay'), info: $('smInfo'),
+                    layerBar: $('smLayerBar'), timeline: $('smTimeline'), status: $('smStatus'), readout: $('smReadout'),
+                    search: $('smSearch'), searchList: $('smSearchList'), zoomIn: $('smZoomIn'), zoomOut: $('smZoomOut'),
+                    place: $('smPlaceLabel'), coords: $('smCoordsLabel'), deviceBtn: $('smDeviceBtn'), panelBtn: $('smPanelBtn'),
+                    modeButtons: Array.from(document.querySelectorAll('[data-sm-mode]')),
+                    scaleBtn: $('smScaleBtn'), prevBtn: $('smPrev'), nextBtn: $('smNext'), yearLabel: $('smYear'),
+                    dateLabel: $('smDateLabel'), timeLabel: $('smTimeLabel'), dateInput: $('smDateInput'), timeInput: $('smTimeInput'),
+                    playBtn: $('smPlay'), speedBtn: $('smSpeed')
+                }});
+                $('smStatus').textContent = '';
+                return smView;
+            }).finally(() => { smViewLoading = null; });
+            return smViewLoading;
+        }
+
+        async function updateStarMap(lat, lon, dateStr, snap) {
+            try {
+                const view = await ensureStarMapView();
+                view.setActive(isSectionOpen('sectionStarMap') && document.visibilityState !== 'hidden');
+                view.setLocation(lat, lon, 'panel');
+                if (snap && isFinite(snap.t)) view.applyState(snap);
+                else view.setDate(dateStr);
+            } catch (error) {
+                console.error('Mappa Stellare:', error);
+                const webgl = /WebGL/i.test(String(error && error.message));
+                document.getElementById('smStatus').textContent = webgl
+                    ? '⚠️ Questo dispositivo/browser non supporta la grafica 3D (WebGL).'
+                    : `⚠️ Mappa Stellare non disponibile: ${error.message}`;
+            }
+        }
+
+        function handleStarMapToggle() {
+            if (!isSectionOpen('sectionStarMap')) {
+                if (smView) smView.setActive(false);   // ferma giroscopio e scorrimento del tempo
+                if (sgFullscreenEl && sgFullscreenEl.id === 'smStage') exitSkyFullscreen();
+                return;
+            }
+            if (smView) smView.setActive(true);
+            handleSectionToggle('sectionStarMap');
+        }
+        function starMapUseDevice() { useDevicePosition('smStatus', ensureStarMapView); }
+        function starMapUsePanel() {
+            if (!smView || currentLat === null) return;
+            smView.setLocation(currentLat, currentLon, 'panel');
+            document.getElementById('smStatus').textContent = '';
+        }
+        function starMapNow() { if (smView) smView.setDate(currentDateStr || localDateStr(new Date())); }
+
         // In secondo piano niente rendering, fotocamera e sensori
         document.addEventListener('visibilitychange', () => {
-            if (ephView) ephView.setActive(document.visibilityState === 'visible' && isSectionOpen('sectionEffemeridi'));
+            const visible = document.visibilityState === 'visible';
+            if (ephView) ephView.setActive(visible && isSectionOpen('sectionEffemeridi'));
+            if (smView) smView.setActive(visible && isSectionOpen('sectionStarMap'));
         });
+
+        // ==========================================
+        // SCHERMO INTERO (riquadro + barra dei livelli + cursore del tempo)
+        // Il tasto Indietro (Android e browser) esce dallo schermo intero invece di lasciare la pagina.
+        // ==========================================
+        let sgFullscreenEl = null;
+        function toggleSkyFullscreen(id) {
+            const target = document.getElementById(id);
+            if (!target) return;
+            if (sgFullscreenEl === target) { exitSkyFullscreen(); return; }
+            if (sgFullscreenEl) exitSkyFullscreen(true);
+            sgFullscreenEl = target;
+            target.classList.add('sg-fs');
+            document.body.classList.add('sg-fs-lock');
+            try { history.pushState({ sgFs: id }, ''); } catch (e) { /* ignora */ }
+            const de = document.documentElement;
+            if (de.requestFullscreen && !document.fullscreenElement) de.requestFullscreen().catch(() => {});
+            updateFullscreenButtons();
+        }
+        function exitSkyFullscreen(fromHistory) {
+            if (!sgFullscreenEl) return;
+            sgFullscreenEl.classList.remove('sg-fs');
+            document.body.classList.remove('sg-fs-lock');
+            sgFullscreenEl = null;
+            if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+            if (!fromHistory && history.state && history.state.sgFs) history.back();
+            updateFullscreenButtons();
+        }
+        function updateFullscreenButtons() {
+            document.querySelectorAll('[data-fs-target]').forEach(b => {
+                const on = !!sgFullscreenEl && sgFullscreenEl.id === b.dataset.fsTarget;
+                b.textContent = on ? '✕' : '⛶';
+                b.title = on ? 'Esci dallo schermo intero' : 'Schermo intero';
+            });
+        }
+        window.addEventListener('popstate', () => { if (sgFullscreenEl) exitSkyFullscreen(true); });
+        document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && sgFullscreenEl) exitSkyFullscreen(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && sgFullscreenEl && !document.fullscreenElement) exitSkyFullscreen(); });
 
         // ==========================================
         // SNAPSHOT OFFLINE 48h (storage: snapshot.js, tile mappa: tilestore.js)
         // Le risposte GET intercettate durante la cattura vengono archiviate per ID snapshot su Android.
         // Consultazione = solo su richiesta dell'utente.
         // ==========================================
-        const SNAP_DATA_SECTIONS = ['sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna', 'lunarCalendarPanel', 'sectionSimulatore', 'sectionSatellites', 'sectionEffemeridi'];
+        const SNAP_DATA_SECTIONS = ['sectionCommerciali', 'sectionOpenMeteo', 'sectionSoleLuna', 'lunarCalendarPanel', 'sectionSimulatore', 'sectionSatellites', 'sectionEffemeridi', 'sectionStarMap'];
         const SNAP_IFRAME_SECTIONS = ['sectionMeteoblue', 'sectionLightPollution', 'sectionAltriModelli', 'sectionLiveStations'];
         const SNAP_ALL_SECTIONS = SNAP_DATA_SECTIONS.concat(SNAP_IFRAME_SECTIONS);
         const SNAP_IFRAME_HOSTS = ['sectionCommerciali'].concat(SNAP_IFRAME_SECTIONS);   // sezioni che contengono iframe
@@ -2525,7 +2748,7 @@ function renderPassesTable(passes) {
             sectionCommerciali: 'Siti commerciali', sectionOpenMeteo: 'Open-Meteo', sectionSoleLuna: 'Sole e Luna',
             lunarCalendarPanel: 'Calendario lunare', sectionSimulatore: 'Mappa solare/lunare', sectionSatellites: 'Satelliti',
             sectionMeteoblue: 'Meteoblue', sectionLightPollution: 'Inquinamento luminoso', sectionAltriModelli: 'Altri modelli',
-            sectionLiveStations: 'Stazioni live', sectionEffemeridi: 'Effemeridi 3D'
+            sectionLiveStations: 'Stazioni live', sectionEffemeridi: 'Effemeridi 3D', sectionStarMap: 'Mappa Stellare'
         };
         const SIM_TILE_LAYERS = {
             osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
@@ -2845,6 +3068,7 @@ function renderPassesTable(passes) {
             }
             if (open('sectionSoleLuna')) sections.sectionSoleLuna = {};         // calcolo locale da coordinate + data
             if (open('sectionEffemeridi')) sections.sectionEffemeridi = ephView ? ephView.getState() : {};   // calcolo locale: livelli, istante, vista
+            if (open('sectionStarMap')) sections.sectionStarMap = smView ? smView.getState() : {};           // idem (dati stellari inclusi nell'app)
             if (open('lunarCalendarPanel')) sections.lunarCalendarPanel = {};   // idem
             if (open('sectionSimulatore') && simMap) {
                 const c = simMap.getCenter();

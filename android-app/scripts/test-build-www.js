@@ -19,6 +19,8 @@ for (const localPath of [
   'snapshot.js',
   'tilestore.js',
   'ephemeris.js',
+  'starmap.js',
+  'skydata.js',
   'vendor/three.min.js',
 ]) {
   assert(html.includes(localPath) || fs.existsSync(path.join(root, 'www', localPath)), `asset mancante: ${localPath}`);

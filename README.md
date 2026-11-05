@@ -13,6 +13,25 @@ Pannello in fondo alla dashboard (`ephemeris.js`, grafica con Three.js 0.149). M
 
 Tutto è calcolato in locale (SunCalc + formule standard per la Via Lattea): funziona offline e entra negli snapshot. Sul sito Three.js viene scaricato dal CDN solo all'apertura del pannello; nell'app è incluso in `www/vendor`.
 
+## Mappa Stellare
+
+Pannello dopo le Effemeridi (`starmap.js` + dati `skydata.js`, grafica Three.js): il cielo visto dall'osservatore come in un planetario, per le coordinate del Pannello di Controllo o del dispositivo.
+
+- **Contenuti**: 41.487 stelle fino a magnitudine 8 (zoomando compaiono le più deboli), figure, nomi italiani e confini delle costellazioni, Via Lattea, 110 oggetti Messier, Sole, Luna con la fase, pianeti da Mercurio a Nettuno, griglie azimutale ed equatoriale, eclittica e meridiano, suolo, atmosfera diurna e modalità notte (rossa). Tutto si attiva dalla barra a destra.
+- **Dettagli**: toccando un oggetto si apre la scheda (nome, sigle, costellazione, magnitudine, colore, tipo spettrale, distanza, coordinate, altezza/azimut, orari di sorgere/culminazione/tramonto) con il tasto «Centra». La ricerca trova stelle, costellazioni, pianeti e Messier.
+- **Navigazione**: a mano (trascina, pizzica/rotella o +/− per lo zoom) oppure con giroscopio e bussola, senza fotocamera.
+- **Tempo**: cursore 24 ore o 365 giorni, data e ora modificabili, scorrimento ▶ a 1 min/s, 10 min/s o 1 h/s.
+
+Dati: stelle dal catalogo HYG v4.1 (CC BY-SA 4.0, D. Nash / astronexus), costellazioni, Via Lattea e Messier da d3-celestial (BSD-3-Clause, O. Frohn), pianeti con gli elementi orbitali JPL. Il file `skydata.js` è generato e distribuito con licenza CC BY-SA 4.0; si rigenera con:
+
+```bash
+node android-app/scripts/build-skydata.js hygdata_v41.csv d3-celestial/data
+```
+
+## Schermo intero
+
+Mappa Stellare ed Effemeridi hanno il tasto ⛶: il riquadro occupa tutto lo schermo insieme alla barra dei livelli e al cursore del tempo. Si esce con ✕, con Esc o con il tasto Indietro (anche nell'app Android).
+
 ## Deploy web
 
 Vercel continua a pubblicare la cartella principale come sito statico. Le configurazioni, dipendenze e risorse generate per Android si trovano in `android-app/` e sono escluse dal deploy tramite `.vercelignore`.

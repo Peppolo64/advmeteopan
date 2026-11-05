@@ -235,7 +235,8 @@
 
     const astro = { DEG, norm360, julianDay, gmstDeg, equToHor, galToEqu, GALACTIC_CENTER, horToVec, vecToHor,
                     sunAltAz, moonAltAz, gcAltAz, findCrossings, findMaximum, localDayRange, localDateStr, dayEvents,
-                    samplePath, milkyWayPoints, sunPhase, SUN_LEVELS, TWILIGHT_BANDS, cardinal, formatCoords, gmtLabel };
+                    samplePath, milkyWayPoints, sunPhase, SUN_LEVELS, TWILIGHT_BANDS, cardinal, formatCoords, gmtLabel,
+                    skyColor, hhmm };
 
     // =====================================================================
     // LIVELLI
