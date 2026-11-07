@@ -39,6 +39,7 @@
     <script src="tilestore.js"></script>
     <script src="ephemeris.js"></script>
     <script src="starmap.js"></script>
+    <script src="altimeter.js"></script>
 
     <style>
         html:not(.native-app) #snapshotModeBanner,
@@ -81,6 +82,7 @@
         html.wear-app #sectionSatellites,
         html.wear-app #sectionEffemeridi,
         html.wear-app #sectionStarMap,
+        html.wear-app #sectionAltimetro,
         html.wear-app #sectionLiveStations {
             display: none !important;
         }
@@ -751,7 +753,7 @@
             </div>
         </details>
 
-        <details id="sectionStarMap" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" ontoggle="handleStarMapToggle()">
+        <details id="sectionStarMap" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8" ontoggle="handleStarMapToggle()">
             <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
                 <h2 class="text-xl font-bold text-white mb-0">✨ Mappa Stellare</h2>
                 <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
@@ -820,6 +822,32 @@
                     </div>
                 </div>
                 <p class="text-[10px] text-slate-500">Dati: stelle dal catalogo HYG v4.1 (CC BY-SA 4.0, D. Nash / astronexus); costellazioni, Via Lattea e oggetti Messier da d3-celestial (BSD, O. Frohn); pianeti con gli elementi orbitali JPL. Tocca un oggetto per i dettagli.</p>
+            </div>
+        </details>
+
+        <details id="sectionAltimetro" class="bg-slate-800 rounded-lg shadow-lg border border-slate-700 group mt-8 mb-12" ontoggle="handleAltimeterToggle()">
+            <summary class="list-none flex justify-between items-center cursor-pointer p-6 [&::-webkit-details-marker]:hidden">
+                <h2 class="text-xl font-bold text-white mb-0">📍 Posizione e Altitudine</h2>
+                <span class="text-slate-400 group-open:rotate-180 transition-transform duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="px-3 sm:px-6 pb-6 space-y-4">
+                <div id="altCaps" class="flex flex-wrap gap-1.5"></div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs text-slate-400">Durata della misura:</span>
+                    <div class="inline-flex bg-slate-900/70 border border-slate-700 rounded-full p-1 gap-1" role="group" aria-label="Durata della misura">
+                        <button type="button" data-alt-dur="10" class="px-3 py-1 rounded-full text-xs font-semibold transition">Rapida 10 s</button>
+                        <button type="button" data-alt-dur="30" class="px-3 py-1 rounded-full text-xs font-semibold transition">Precisa 30 s</button>
+                        <button type="button" data-alt-dur="60" class="px-3 py-1 rounded-full text-xs font-semibold transition">Massima 60 s</button>
+                    </div>
+                </div>
+                <button id="altStart" type="button" class="w-full bg-blue-600 text-white font-bold tracking-wide py-3 rounded-lg shadow-lg hover:bg-blue-500 transition">📍 CALCOLA COORDINATE E ALTITUDINE</button>
+                <div id="altLive" class="hidden bg-slate-900/60 border border-slate-700 rounded-lg p-3"></div>
+                <div id="altResult" class="space-y-3"></div>
+                <p class="text-[10px] text-slate-500">Per la misura migliore: all'aperto, cielo libero, telefono fermo. Il barometro è disponibile solo nell'app Android. Per avere il QNH anche offline, tieni aperto questo pannello quando catturi uno snapshot: viene salvata la mappa QNH (previsione oraria per 48 h su un raggio di 100 km). I sensori restano accesi solo durante la misura.</p>
             </div>
         </details>
 
@@ -2695,7 +2723,48 @@ function renderPassesTable(passes) {
             const visible = document.visibilityState === 'visible';
             if (ephView) ephView.setActive(visible && isSectionOpen('sectionEffemeridi'));
             if (smView) smView.setActive(visible && isSectionOpen('sectionStarMap'));
+            if (!visible && altPanel) altPanel.abort();   // misura interrotta: nessun sensore in secondo piano
         });
+
+        // ==========================================
+        // POSIZIONE E ALTITUDINE (altimeter.js; geoid.js caricato alla prima apertura; plugin nativo Altimeter nell'app)
+        // ==========================================
+        let altPanel = null;
+        let geoidLoader = null;
+        function altimeterPlugin() {
+            return isNativeApp && window.Capacitor.isPluginAvailable && window.Capacitor.isPluginAvailable('Altimeter')
+                ? window.Capacitor.Plugins.Altimeter : null;
+        }
+        function loadGeoid() {
+            if (window.SkyGeoid) return Promise.resolve(window.SkyGeoid);
+            if (geoidLoader) return geoidLoader;
+            geoidLoader = new Promise(resolve => {
+                const s = document.createElement('script');
+                s.src = 'geoid.js';
+                s.onload = () => resolve(window.SkyGeoid || null);
+                s.onerror = () => { geoidLoader = null; s.remove(); resolve(null); };   // senza geoide la quota GPS del browser non è convertibile
+                document.head.appendChild(s);
+            });
+            return geoidLoader;
+        }
+        async function handleAltimeterToggle() {
+            if (!isSectionOpen('sectionAltimetro')) { if (altPanel) altPanel.abort(); return; }
+            await loadGeoid();
+            if (altPanel) { altPanel.refreshCaps(); return; }
+            const $ = id => document.getElementById(id);
+            altPanel = SkyAltimeter.createPanel({
+                plugin: altimeterPlugin(),
+                elements: { caps: $('altCaps'), startBtn: $('altStart'), live: $('altLive'), result: $('altResult'),
+                            durationButtons: Array.from(document.querySelectorAll('[data-alt-dur]')) },
+                // mappe QNH salvate negli snapshot validi (servono offline)
+                snapshotGrids: () => (window.SkySnapshot ? SkySnapshot.list() : [])
+                    .filter(sn => sn.sections && sn.sections.sectionAltimetro && sn.sections.sectionAltimetro.grid)
+                    .map(sn => ({ grid: sn.sections.sectionAltimetro.grid, label: SkySnapshot.labelFor(sn) })),
+                fallbackPosition: () => currentLat !== null ? { lat: currentLat, lon: currentLon } : null
+            });
+        }
+        window.addEventListener('online', () => { if (altPanel) altPanel.refreshCaps(); });
+        window.addEventListener('offline', () => { if (altPanel) altPanel.refreshCaps(); });
 
         // ==========================================
         // SCHERMO INTERO (riquadro + barra dei livelli + cursore del tempo)
@@ -2748,7 +2817,8 @@ function renderPassesTable(passes) {
             sectionCommerciali: 'Siti commerciali', sectionOpenMeteo: 'Open-Meteo', sectionSoleLuna: 'Sole e Luna',
             lunarCalendarPanel: 'Calendario lunare', sectionSimulatore: 'Mappa solare/lunare', sectionSatellites: 'Satelliti',
             sectionMeteoblue: 'Meteoblue', sectionLightPollution: 'Inquinamento luminoso', sectionAltriModelli: 'Altri modelli',
-            sectionLiveStations: 'Stazioni live', sectionEffemeridi: 'Effemeridi 3D', sectionStarMap: 'Mappa Stellare'
+            sectionLiveStations: 'Stazioni live', sectionEffemeridi: 'Effemeridi 3D', sectionStarMap: 'Mappa Stellare',
+            sectionAltimetro: 'Mappa QNH'
         };
         const SIM_TILE_LAYERS = {
             osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
@@ -3069,6 +3139,7 @@ function renderPassesTable(passes) {
             if (open('sectionSoleLuna')) sections.sectionSoleLuna = {};         // calcolo locale da coordinate + data
             if (open('sectionEffemeridi')) sections.sectionEffemeridi = ephView ? ephView.getState() : {};   // calcolo locale: livelli, istante, vista
             if (open('sectionStarMap')) sections.sectionStarMap = smView ? smView.getState() : {};           // idem (dati stellari inclusi nell'app)
+            if (open('sectionAltimetro')) sections.sectionAltimetro = {};                                      // mappa QNH: scaricata in takeSnapshot()
             if (open('lunarCalendarPanel')) sections.lunarCalendarPanel = {};   // idem
             if (open('sectionSimulatore') && simMap) {
                 const c = simMap.getCenter();
@@ -3171,6 +3242,21 @@ function renderPassesTable(passes) {
                         sim.tiles = await captureTiles(id, sim.layer, setSnapshotStatus);
                         if (!sim.tiles.saved) notes.push('mappa senza tile');
                         else if (sim.tiles.failed) notes.push(`${sim.tiles.failed} tile non scaricate`);
+                    }
+                }
+
+                if (c.sections.sectionAltimetro) {
+                    if (navigator.onLine === false) {
+                        delete c.sections.sectionAltimetro;
+                        notes.push('mappa QNH non scaricata (sei offline)');
+                    } else {
+                        setSnapshotStatus('Scarico la mappa QNH della zona (100 km, 48 ore)…');
+                        try {
+                            Object.assign(c.sections.sectionAltimetro, await SkyAltimeter.fetchQnhGrid(c.lat, c.lon, altimeterPlugin()));
+                        } catch (qnhError) {
+                            delete c.sections.sectionAltimetro;
+                            notes.push('mappa QNH non scaricata: ' + qnhError.message);
+                        }
                     }
                 }
 

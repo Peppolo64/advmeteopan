@@ -28,6 +28,19 @@ Dati: stelle dal catalogo HYG v4.1 (CC BY-SA 4.0, D. Nash / astronexus), costell
 node android-app/scripts/build-skydata.js hygdata_v41.csv d3-celestial/data
 ```
 
+## Posizione e Altitudine
+
+Ultimo pannello (`altimeter.js`, geoide `geoid.js`, plugin Android `AltimeterPlugin.java`). Il tasto «Calcola coordinate e altitudine» raccoglie i campioni per 10, 30 o 60 s e mostra:
+
+- **coordinate** mediate (gradi/primi/secondi e decimali) con la precisione stimata, satelliti usati e quanti in doppia frequenza L5;
+- **altitudine per metodo**: GPS (quota s.l.m. nativa di Android 14+ o ellissoide − geoide EGM96 nel browser), barometro tarato sul QNH del METAR più vicino e del modello Open-Meteo (con correzione di temperatura), quota del terreno Copernicus GLO-90; offline il barometro usa la mappa QNH degli snapshot;
+- **altitudine complessiva**: media pesata 1/σ² con margine di errore (68% e 95%), allargato se i metodi non concordano;
+- **QNH e pressione**: stazione, distanza e orario del METAR, valore del modello, QNH ricostruito dal GPS, pressione misurata e pressione attesa nel punto.
+
+Il barometro è disponibile solo nell'app Android (i browser non lo espongono). Nell'app il METAR viene scaricato dal plugin nativo. Con il pannello aperto, lo snapshot salva la **mappa QNH**: previsione oraria di pressione e temperatura per 48 h su una griglia 9×9 in un raggio di 100 km. I sensori sono accesi solo durante la misura e si spengono quando l'app va in secondo piano.
+
+Il geoide si rigenera con `node android-app/scripts/build-geoid.js <egm96-universal/dist/egm96-universal.cjs.js>` (griglia EGM96 dell'NGA).
+
 ## Schermo intero
 
 Mappa Stellare ed Effemeridi hanno il tasto ⛶: il riquadro occupa tutto lo schermo insieme alla barra dei livelli e al cursore del tempo. Si esce con ✕, con Esc o con il tasto Indietro (anche nell'app Android).

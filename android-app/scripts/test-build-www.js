@@ -21,6 +21,8 @@ for (const localPath of [
   'ephemeris.js',
   'starmap.js',
   'skydata.js',
+  'altimeter.js',
+  'geoid.js',
   'vendor/three.min.js',
 ]) {
   assert(html.includes(localPath) || fs.existsSync(path.join(root, 'www', localPath)), `asset mancante: ${localPath}`);
