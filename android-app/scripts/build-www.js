@@ -46,7 +46,7 @@ for (const [from, to] of replacements) html = replaceOnce(html, from, to);
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, html);
-for (const name of ['snapshot.js', 'tilestore.js', 'ephemeris.js', 'starmap.js', 'skydata.js', 'altimeter.js', 'geoid.js']) {
+for (const name of ['snapshot.js', 'tilestore.js', 'ephemeris.js', 'starmap.js', 'skydata.js', 'altimeter.js', 'geoid.js', 'tracker.js']) {
   fs.copyFileSync(path.join(repoRoot, name), path.join(appRoot, 'www', name));
 }
 console.log('www/index.html generato da index.html; supporto snapshot copiato.');

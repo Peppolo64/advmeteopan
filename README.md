@@ -41,6 +41,16 @@ Il barometro è disponibile solo nell'app Android (i browser non lo espongono). 
 
 Il geoide si rigenera con `node android-app/scripts/build-geoid.js <egm96-universal/dist/egm96-universal.cjs.js>` (griglia EGM96 dell'NGA).
 
+## GPS Tracking
+
+Pannello in fondo (`tracker.js`, plugin Android `TrackerPlugin` + servizio `TrackingService`): velocità GPS istantanea con errore (Doppler nativo nell'app, stimato nel browser) e, con «Avvia Percorso», velocità media su tutto il percorso e in movimento, distanza, durata, velocità massima, quota, salita e discesa (dal barometro se c'è), grafico della velocità in tempo reale, traccia su mappa ed esportazione GPX.
+
+Con «Esegui in background» (solo app) il percorso continua ad app chiusa tramite un servizio in primo piano con notifica e tasto Ferma, attivo solo finché il percorso è in corso. Senza, il GPS si ferma con l'app: quei periodi valgono velocità zero nel grafico, non aggiungono distanza e abbassano la media. Il workflow ammette solo questo servizio (tipo `location`, non esportato) e continua a bloccare receiver, avvio automatico, wake lock e posizione in background.
+
+## Aggiornare l'APK senza disinstallare
+
+`android/signing.gradle` firma l'APK con una chiave fissa ricostruita dai segreti GitHub `SKYGUARDIAN_KEYSTORE_BASE64` e `SKYGUARDIAN_KEYSTORE_PASSWORD` (Settings → Secrets and variables → Actions) e usa il numero della build come `versionCode`. Senza segreti l'APK resta firmato con una chiave di debug temporanea.
+
 ## Schermo intero
 
 Mappa Stellare ed Effemeridi hanno il tasto ⛶: il riquadro occupa tutto lo schermo insieme alla barra dei livelli e al cursore del tempo. Si esce con ✕, con Esc o con il tasto Indietro (anche nell'app Android).

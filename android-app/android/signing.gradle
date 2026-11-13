@@ -1,0 +1,31 @@
+// Firma fissa dell'APK, per installare ogni nuova versione sopra la precedente senza disinstallare.
+// La chiave NON è nel repository: il workflow la ricostruisce dai segreti GitHub
+// SKYGUARDIAN_KEYSTORE_BASE64 e SKYGUARDIAN_KEYSTORE_PASSWORD. Senza segreti si usa la chiave di debug.
+def ksFile = System.getenv('SKYGUARDIAN_KEYSTORE_FILE')
+def ksPass = System.getenv('SKYGUARDIAN_KEYSTORE_PASSWORD')
+def runNumber = System.getenv('GITHUB_RUN_NUMBER')
+
+android {
+    if (runNumber) {
+        // versionCode sempre crescente: Android accetta l'aggiornamento
+        defaultConfig.versionCode = 100 + runNumber.toInteger()
+        defaultConfig.versionName = "1.${runNumber}"
+    }
+    if (ksFile && ksPass && file(ksFile).exists()) {
+        signingConfigs {
+            skyguardian {
+                storeFile file(ksFile)
+                storePassword ksPass
+                keyAlias 'skyguardian'
+                keyPassword ksPass
+            }
+        }
+        buildTypes {
+            debug { signingConfig signingConfigs.skyguardian }
+            release { signingConfig signingConfigs.skyguardian }
+        }
+        println "SkyGuardian: APK firmato con la chiave fissa"
+    } else {
+        println "SkyGuardian: chiave fissa assente, uso la chiave di debug (l'aggiornamento richiederà di disinstallare)"
+    }
+}

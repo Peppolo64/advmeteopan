@@ -40,21 +40,45 @@ jobs:
       - name: Rafforza il manifest (niente backup, niente traffico in chiaro)
         run: node scripts/harden-manifest.js
 
-      - name: Verifica che l'app non lavori in background
+      - name: Verifica che l'app non lavori in background (tranne il percorso GPS con notifica)
         run: |
           M=android/app/src/main/AndroidManifest.xml
           echo "--- $M"; cat "$M"
-          if grep -nE '<service|<receiver|WAKE_LOCK|FOREGROUND_SERVICE|RECEIVE_BOOT_COMPLETED|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|ACCESS_BACKGROUND_LOCATION' "$M"; then
-            echo "::error::Il manifest dichiara servizi, receiver o permessi per lavorare in background"; exit 1
+          if grep -nE '<receiver|WAKE_LOCK|RECEIVE_BOOT_COMPLETED|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|ACCESS_BACKGROUND_LOCATION' "$M"; then
+            echo "::error::Il manifest dichiara receiver o permessi per lavorare in background"; exit 1
+          fi
+          # Unico servizio ammesso: TrackingService, in primo piano (notifica visibile), tipo "location", non esportato
+          if [ "$(grep -c '<service' "$M")" != "1" ]; then echo "::error::Ammesso un solo servizio (TrackingService)"; exit 1; fi
+          tr -d '\n' < "$M" | grep -oE '<service[^>]*>' | grep -q 'android:name=".TrackingService"' || { echo "::error::Servizio non ammesso"; exit 1; }
+          tr -d '\n' < "$M" | grep -oE '<service[^>]*>' | grep -q 'android:foregroundServiceType="location"' || { echo "::error::TrackingService deve essere di tipo location"; exit 1; }
+          tr -d '\n' < "$M" | grep -oE '<service[^>]*>' | grep -q 'android:exported="false"' || { echo "::error::TrackingService non deve essere esportato"; exit 1; }
+          if grep -oE 'android.permission.FOREGROUND_SERVICE_[A-Z_]+' "$M" | grep -v '^android.permission.FOREGROUND_SERVICE_LOCATION$'; then
+            echo "::error::Ammesso solo FOREGROUND_SERVICE_LOCATION"; exit 1
           fi
           grep -q 'android:allowBackup="false"' "$M" || { echo "::error::allowBackup non è false"; exit 1; }
           grep -q 'android:usesCleartextTraffic="false"' "$M" || { echo "::error::traffico in chiaro non disattivato"; exit 1; }
-          echo "OK: nessun servizio/receiver/permesso di background, backup disattivato, solo HTTPS"
+          echo "OK: solo il servizio del percorso GPS (in primo piano, con notifica), nessun receiver/avvio automatico/posizione in background, backup disattivato, solo HTTPS"
+
+      - name: Chiave di firma fissa (dai segreti GitHub)
+        env:
+          KS_B64: ${{ secrets.SKYGUARDIAN_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/skyguardian.jks"
+            echo "SKYGUARDIAN_KEYSTORE_FILE=$RUNNER_TEMP/skyguardian.jks" >> "$GITHUB_ENV"
+            echo "Firma fissa attiva: l'APK si installa sopra la versione precedente"
+          else
+            echo "::warning::Segreto SKYGUARDIAN_KEYSTORE_BASE64 assente: APK firmato con una chiave di debug temporanea (per aggiornare bisogna disinstallare)"
+          fi
 
       - name: Compila APK Android (debug)
+        env:
+          SKYGUARDIAN_KEYSTORE_PASSWORD: ${{ secrets.SKYGUARDIAN_KEYSTORE_PASSWORD }}
         run: ./android/gradlew -p android assembleDebug --no-daemon
 
       - name: Compila APK Wear OS (debug)
+        env:
+          SKYGUARDIAN_KEYSTORE_PASSWORD: ${{ secrets.SKYGUARDIAN_KEYSTORE_PASSWORD }}
         run: ./android/gradlew -p android :wear:assembleDebug --no-daemon
 
       - name: Componenti delle librerie nel manifest finale (solo informativo)

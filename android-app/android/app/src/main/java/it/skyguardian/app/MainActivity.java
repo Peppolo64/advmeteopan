@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(OfflineWebCachePlugin.class);
         registerPlugin(AltimeterPlugin.class);
+        registerPlugin(TrackerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
