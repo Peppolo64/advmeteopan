@@ -24,6 +24,7 @@ for (const localPath of [
   'altimeter.js',
   'geoid.js',
   'tracker.js',
+  'version.js',
   'vendor/three.min.js',
 ]) {
   assert(html.includes(localPath) || fs.existsSync(path.join(root, 'www', localPath)), `asset mancante: ${localPath}`);
@@ -218,10 +219,13 @@ assert(
   'il workflow APK deve compilare anche il modulo Wear OS'
 );
 assert(/^\s*push:\s*$/m.test(apkWorkflow), 'il workflow deve generare gli APK a ogni push, non solo su main');
-assert(apkWorkflow.includes('name: SkyGuardian-Android-apk'), 'l’APK telefono deve essere pubblicato come artefatto separato');
-assert(apkWorkflow.includes('name: SkyGuardian-WearOS-apk'), 'l’APK Wear OS deve essere pubblicato come artefatto separato');
-assert(apkWorkflow.includes('android/app/build/outputs/apk/debug/app-debug.apk'), 'il workflow deve caricare l’APK telefono');
-assert(apkWorkflow.includes('android/wear/build/outputs/apk/debug/wear-debug.apk'), 'il workflow deve caricare l’APK watch');
+assert(apkWorkflow.includes('name: SkyGuardian-v${{ env.SKY_VERSION }}-build${{ github.run_number }}'), 'l’APK telefono deve essere pubblicato come artefatto separato, con versione e build');
+assert(apkWorkflow.includes('name: SkyGuardian-Wear-v${{ env.SKY_VERSION }}-build${{ github.run_number }}'), 'l’APK Wear OS deve essere pubblicato come artefatto separato, con versione e build');
+assert(apkWorkflow.includes('android/app/build/outputs/apk/debug/*.apk'), 'il workflow deve caricare l’APK telefono');
+assert(apkWorkflow.includes('android/wear/build/outputs/apk/debug/*.apk'), 'il workflow deve caricare l’APK watch');
+const signing = fs.readFileSync(path.join(root, 'android', 'signing.gradle'), 'utf8');
+assert(/outputFileName = "\$\{apkPrefix\}-v\$\{appVersion\}/.test(signing), 'il nome dell’APK deve contenere la versione');
+assert(/SKY_VERSION = '\d+\.\d+\.\d+';/.test(fs.readFileSync(path.join(repoRoot, 'version.js'), 'utf8')), 'version.js deve contenere una versione x.y.z');
 assert(apkWorkflow.includes('node scripts/build-wear.js'), 'il workflow deve generare gli asset Wear OS prima della build');
 const wearManifest = fs.readFileSync(
   path.join(root, 'android', 'wear', 'src', 'main', 'AndroidManifest.xml'),

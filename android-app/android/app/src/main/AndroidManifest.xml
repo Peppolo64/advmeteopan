@@ -59,4 +59,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Solo durante un percorso in background: processore sveglio (rilasciato in pausa e a fine percorso)
+         e richiesta di esenzione dall'ottimizzazione batteria (riquadro di sistema, decide l'utente) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 </manifest>

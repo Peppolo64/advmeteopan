@@ -43,9 +43,15 @@ Il geoide si rigenera con `node android-app/scripts/build-geoid.js <egm96-univer
 
 ## GPS Tracking
 
-Pannello in fondo (`tracker.js`, plugin Android `TrackerPlugin` + servizio `TrackingService`): velocità GPS istantanea con errore (Doppler nativo nell'app, stimato nel browser) e, con «Avvia Percorso», velocità media su tutto il percorso e in movimento, distanza, durata, velocità massima, quota, salita e discesa (dal barometro se c'è), grafico della velocità in tempo reale, traccia su mappa ed esportazione GPX.
+Pannello in fondo (`tracker.js`, plugin Android `TrackerPlugin` + servizio `TrackingService`): velocità GPS istantanea con errore e registrazione del percorso con **Avvia / Pausa / Riprendi / Ferma** (in pausa il GPS è spento e il tempo non conta nella media), grafico in tempo reale, mappa, **archivio** dei percorsi (apri, esporta GPX, elimina) ed esportazione GPX.
 
-Con «Esegui in background» (solo app) il percorso continua ad app chiusa tramite un servizio in primo piano con notifica e tasto Ferma, attivo solo finché il percorso è in corso. Senza, il GPS si ferma con l'app: quei periodi valgono velocità zero nel grafico, non aggiungono distanza e abbassano la media. Il workflow ammette solo questo servizio (tipo `location`, non esportato) e continua a bloccare receiver, avvio automatico, wake lock e posizione in background.
+**Impostazioni di registrazione** (con profili Camminata, Corsa, Bicicletta, Auto, Rilievo di precisione, Risparmio batteria): intervallo tra i punti, distanza minima, precisione minima del punto, precisione per iniziare, errore di velocità ammesso, velocità minima e massima plausibile, pausa automatica (soglia e tempo), fonte della quota (GPS, barometro, combinata), tracciamento GNSS completo, processore sveglio, dati extra nel GPX (precisione, satelliti, velocità e direzione in formato Garmin, pressione). I dati grezzi restano salvati: le impostazioni si applicano al calcolo e all'esportazione. La frequenza L1/L5 la sceglie il chip GNSS (Android non la fa scegliere alle app).
+
+**Esegui in background** (switch, solo app): servizio in primo piano con notifica «SkyGuardian sta registrando» e tasti Pausa/Riprendi e Ferma, wake lock parziale durante la registrazione, richiesta di esenzione dall'ottimizzazione batteria e controllo delle impostazioni del telefono (su Samsung: Batteria «Senza restrizioni» e «Consenti attività in background»). I punti sono scritti su file man mano: se il sistema chiude l'app, il percorso si recupera alla riapertura. Senza background il GPS si ferma con l'app: quei periodi valgono velocità zero e abbassano la media. Il workflow ammette solo questo servizio e i relativi permessi; continua a bloccare receiver, avvio automatico e posizione in background.
+
+## Versione
+
+Unica fonte: `version.js` (`window.SKY_VERSION = 'MAGGIORE.MINORE.CORREZIONE'`). Il workflow aggiunge il numero di build: l'APK si chiama `SkyGuardian-v2.0.0-build25.apk` (`versionName` «2.0.0 (build 25)», `versionCode` crescente) e la versione è visibile in fondo al Pannello di Controllo.
 
 ## Aggiornare l'APK senza disinstallare
 

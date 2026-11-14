@@ -5,11 +5,23 @@ def ksFile = System.getenv('SKYGUARDIAN_KEYSTORE_FILE')
 def ksPass = System.getenv('SKYGUARDIAN_KEYSTORE_PASSWORD')
 def runNumber = System.getenv('GITHUB_RUN_NUMBER')
 
+// Versione: unica fonte version.js nella radice del repository (window.SKY_VERSION = 'x.y.z')
+def appVersion = '0.0.0'
+def versionFile = new File(rootProject.projectDir, '../../version.js')
+if (versionFile.exists()) {
+    def m = (versionFile.text =~ /SKY_VERSION\s*=\s*'([0-9]+\.[0-9]+\.[0-9]+)'/)
+    if (m.find()) appVersion = m.group(1)
+}
+def apkPrefix = project.name == 'wear' ? 'SkyGuardian-Wear' : 'SkyGuardian'
+
 android {
-    if (runNumber) {
-        // versionCode sempre crescente: Android accetta l'aggiornamento
-        defaultConfig.versionCode = 100 + runNumber.toInteger()
-        defaultConfig.versionName = "1.${runNumber}"
+    // versionCode sempre crescente (numero della build): Android accetta l'aggiornamento
+    defaultConfig.versionCode = runNumber ? 100 + runNumber.toInteger() : 1
+    defaultConfig.versionName = runNumber ? "${appVersion} (build ${runNumber})" : appVersion
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "${apkPrefix}-v${appVersion}${runNumber ? '-build' + runNumber : ''}.apk"
+        }
     }
     if (ksFile && ksPass && file(ksFile).exists()) {
         signingConfigs {

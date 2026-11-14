@@ -49,4 +49,8 @@ fs.writeFileSync(outputPath, html);
 for (const name of ['snapshot.js', 'tilestore.js', 'ephemeris.js', 'starmap.js', 'skydata.js', 'altimeter.js', 'geoid.js', 'tracker.js']) {
   fs.copyFileSync(path.join(repoRoot, name), path.join(appRoot, 'www', name));
 }
+// versione con il numero di build (GitHub Actions)
+const build = process.env.GITHUB_RUN_NUMBER;
+fs.writeFileSync(path.join(appRoot, 'www', 'version.js'),
+  fs.readFileSync(path.join(repoRoot, 'version.js'), 'utf8') + (build ? `window.SKY_BUILD = '${String(build).replace(/[^0-9]/g, '')}';\n` : ''));
 console.log('www/index.html generato da index.html; supporto snapshot copiato.');

@@ -35,6 +35,7 @@
     <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="version.js"></script>
     <script src="snapshot.js"></script>
     <script src="tilestore.js"></script>
     <script src="ephemeris.js"></script>
@@ -307,6 +308,7 @@
                     </div>
                 </div>
             </div>
+            <div id="appVersion" class="px-6 pb-3 -mt-2 text-[10px] text-slate-500 text-right"></div>
         </details>
 
         <!--<div class="h-8"></div>-->
@@ -870,26 +872,44 @@
                     <div id="trkSpeedErr" class="text-sm text-slate-300"></div>
                     <div id="trkFixInfo" class="text-[11px] text-slate-500"></div>
                 </div>
-                <div class="flex flex-wrap items-center gap-3">
+                <div class="flex flex-wrap items-center gap-2">
                     <button id="trkStart" type="button" class="flex-1 min-w-[12rem] bg-emerald-600 text-white font-bold py-3 rounded-lg shadow-lg hover:brightness-110 transition">▶ Avvia Percorso</button>
-                    <label id="trkBgLabel" class="flex items-center gap-2 text-sm text-slate-200 select-none">
-                        <input id="trkBg" type="checkbox" class="w-5 h-5 accent-blue-500 disabled:opacity-40"> Esegui in background
-                    </label>
+                    <button id="trkPause" type="button" class="hidden flex-1 min-w-[8rem] bg-amber-600 text-white font-bold py-3 rounded-lg shadow-lg hover:brightness-110 transition">⏸ Pausa</button>
+                    <button id="trkStop" type="button" class="hidden flex-1 min-w-[8rem] bg-red-600 text-white font-bold py-3 rounded-lg shadow-lg hover:brightness-110 transition">⏹ Ferma</button>
                 </div>
-                <div id="trkBgNote" class="text-[11px] text-slate-400 -mt-2"></div>
+                <div class="flex items-center justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                    <div>
+                        <div class="text-sm font-semibold text-slate-100">Esegui in background</div>
+                        <div id="trkBgNote" class="text-[11px] text-slate-400"></div>
+                    </div>
+                    <button id="trkBgSwitch" type="button" role="switch" aria-checked="false" aria-label="Esegui in background" class="relative shrink-0 w-12 h-7 rounded-full bg-slate-600 transition-colors">
+                        <span id="trkBgKnob" class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform"></span>
+                    </button>
+                </div>
+                <div id="trkPower"></div>
                 <div id="trkStatus" class="text-xs text-amber-300 min-h-[1rem]"></div>
+                <details class="group/set bg-slate-900/40 border border-slate-700 rounded-lg">
+                    <summary class="list-none cursor-pointer px-3 py-2 flex flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+                        <span class="text-sm font-semibold text-slate-100">⚙️ Impostazioni di registrazione GPX</span>
+                        <span class="flex items-center gap-2 text-[12px] text-slate-400" onclick="event.stopPropagation()">Profilo
+                            <select id="trkProfile" class="px-1.5 py-1 text-sm bg-slate-700 border border-slate-600 rounded text-white disabled:opacity-50"></select></span>
+                    </summary>
+                    <div id="trkSettings" class="px-3 pb-3"></div>
+                </details>
                 <div id="trkStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+                <div id="trkFilterNote" class="text-[11px] text-slate-400"></div>
                 <div id="trkGapNote" class="text-[11px] text-red-300"></div>
                 <div id="trkChartBox" class="hidden bg-slate-900/50 border border-slate-700 rounded-lg p-2">
-                    <div class="flex justify-between items-center text-[11px] text-slate-400 mb-1"><span>Velocità nel tempo</span><span><span class="text-sky-400">━</span> velocità · <span class="text-amber-400">┅</span> media · <span class="text-red-400">■</span> senza GPS</span></div>
+                    <div class="flex justify-between items-center text-[11px] text-slate-400 mb-1"><span>Velocità nel tempo</span><span><span class="text-sky-400">━</span> velocità · <span class="text-amber-400">┅</span> media · <span class="text-red-400">■</span> senza GPS · <span class="text-slate-400">■</span> pausa</span></div>
                     <canvas id="trkChart" class="w-full h-44 block"></canvas>
                 </div>
                 <div id="trkMapBox" class="hidden">
                     <div id="trkMap" class="w-full h-72 rounded-lg border border-slate-700 z-0"></div>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <span id="trkInfo" class="text-[11px] text-slate-400"></span>
-                    <button id="trkGpx" type="button" disabled class="text-xs px-3 py-1.5 rounded border border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600 transition disabled:opacity-40">⬇️ Esporta GPX</button>
+                <div id="trkInfo" class="text-[11px] text-slate-400"></div>
+                <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-400 mb-2">📂 Percorsi registrati</div>
+                    <div id="trkArchive" class="space-y-2"></div>
                 </div>
             </div>
         </details>
@@ -899,6 +919,8 @@
     <script>
         let map = null;
         let mapMarker = null;
+        document.getElementById('appVersion').textContent = window.SKY_VERSION
+            ? `SkyGuardian v${window.SKY_VERSION}${window.SKY_BUILD ? ' (build ' + window.SKY_BUILD + ')' : ''}` : '';
 
         // ==========================================
         // GESTIONE MAPPA INTERATTIVA (Leaflet)
@@ -2821,10 +2843,13 @@ function renderPassesTable(passes) {
             trkPanel = SkyTracker.createPanel({
                 plugin: trackerPlugin(),
                 geoidAt: (lat, lon) => window.SkyGeoid ? SkyAltimeter.calc.geoidUndulation(window.SkyGeoid, lat, lon) : NaN,
-                elements: { caps: $('trkCaps'), speed: $('trkSpeed'), speedErr: $('trkSpeedErr'), fixInfo: $('trkFixInfo'), startBtn: $('trkStart'),
-                            bgBox: $('trkBg'), bgLabel: $('trkBgLabel'), bgNote: $('trkBgNote'), status: $('trkStatus'), stats: $('trkStats'),
-                            gapNote: $('trkGapNote'), trackInfo: $('trkInfo'), chartBox: $('trkChartBox'), chart: $('trkChart'),
-                            mapBox: $('trkMapBox'), map: $('trkMap'), gpxBtn: $('trkGpx') }
+                version: window.SKY_VERSION || '',
+                elements: { caps: $('trkCaps'), speed: $('trkSpeed'), speedErr: $('trkSpeedErr'), fixInfo: $('trkFixInfo'),
+                            startBtn: $('trkStart'), pauseBtn: $('trkPause'), stopBtn: $('trkStop'),
+                            bgSwitch: $('trkBgSwitch'), bgKnob: $('trkBgKnob'), bgNote: $('trkBgNote'), power: $('trkPower'),
+                            status: $('trkStatus'), profile: $('trkProfile'), settings: $('trkSettings'), stats: $('trkStats'),
+                            filterNote: $('trkFilterNote'), gapNote: $('trkGapNote'), trackInfo: $('trkInfo'), chartBox: $('trkChartBox'),
+                            chart: $('trkChart'), mapBox: $('trkMapBox'), map: $('trkMap'), archive: $('trkArchive') }
             });
             return trkPanel;
         }

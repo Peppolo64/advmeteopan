@@ -44,7 +44,8 @@ jobs:
         run: |
           M=android/app/src/main/AndroidManifest.xml
           echo "--- $M"; cat "$M"
-          if grep -nE '<receiver|WAKE_LOCK|RECEIVE_BOOT_COMPLETED|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|ACCESS_BACKGROUND_LOCATION' "$M"; then
+          # WAKE_LOCK e REQUEST_IGNORE_BATTERY_OPTIMIZATIONS sono ammessi solo per il percorso in background (TrackingService)
+          if grep -nE '<receiver|RECEIVE_BOOT_COMPLETED|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|ACCESS_BACKGROUND_LOCATION|SYSTEM_ALERT_WINDOW' "$M"; then
             echo "::error::Il manifest dichiara receiver o permessi per lavorare in background"; exit 1
           fi
           # Unico servizio ammesso: TrackingService, in primo piano (notifica visibile), tipo "location", non esportato
@@ -57,7 +58,14 @@ jobs:
           fi
           grep -q 'android:allowBackup="false"' "$M" || { echo "::error::allowBackup non è false"; exit 1; }
           grep -q 'android:usesCleartextTraffic="false"' "$M" || { echo "::error::traffico in chiaro non disattivato"; exit 1; }
-          echo "OK: solo il servizio del percorso GPS (in primo piano, con notifica), nessun receiver/avvio automatico/posizione in background, backup disattivato, solo HTTPS"
+          echo "OK: solo il servizio del percorso GPS (in primo piano, con notifica; wake lock ed esenzione batteria solo per lui), nessun receiver/avvio automatico/posizione in background, backup disattivato, solo HTTPS"
+
+      - name: Versione (da version.js)
+        run: |
+          V=$(sed -n "s/.*SKY_VERSION = '\([0-9.]*\)'.*/\1/p" ../version.js)
+          [ -n "$V" ] || { echo "::error::Versione non trovata in version.js"; exit 1; }
+          echo "SKY_VERSION=$V" >> "$GITHUB_ENV"
+          echo "Versione $V, build ${{ github.run_number }}"
 
       - name: Chiave di firma fissa (dai segreti GitHub)
         env:
@@ -88,12 +96,12 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SkyGuardian-Android-apk
-          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          name: SkyGuardian-v${{ env.SKY_VERSION }}-build${{ github.run_number }}
+          path: android-app/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SkyGuardian-WearOS-apk
-          path: android-app/android/wear/build/outputs/apk/debug/wear-debug.apk
+          name: SkyGuardian-Wear-v${{ env.SKY_VERSION }}-build${{ github.run_number }}
+          path: android-app/android/wear/build/outputs/apk/debug/*.apk
           if-no-files-found: error
