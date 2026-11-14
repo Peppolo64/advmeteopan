@@ -900,7 +900,14 @@
                 <div id="trkFilterNote" class="text-[11px] text-slate-400"></div>
                 <div id="trkGapNote" class="text-[11px] text-red-300"></div>
                 <div id="trkChartBox" class="hidden bg-slate-900/50 border border-slate-700 rounded-lg p-2">
-                    <div class="flex justify-between items-center text-[11px] text-slate-400 mb-1"><span>Velocità nel tempo</span><span><span class="text-sky-400">━</span> velocità · <span class="text-amber-400">┅</span> media · <span class="text-red-400">■</span> senza GPS · <span class="text-slate-400">■</span> pausa</span></div>
+                    <div class="flex flex-wrap justify-between items-center gap-2 text-[11px] text-slate-400 mb-1">
+                        <div id="trkChartModes" class="inline-flex bg-slate-900/70 border border-slate-700 rounded-full p-0.5 gap-0.5" role="group" aria-label="Grafico">
+                            <button type="button" data-mode="speed" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition">Velocità</button>
+                            <button type="button" data-mode="alt" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition">Altitudine</button>
+                            <button type="button" data-mode="both" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition">Velocità + Altitudine</button>
+                        </div>
+                        <span id="trkChartLegend"></span>
+                    </div>
                     <canvas id="trkChart" class="w-full h-44 block"></canvas>
                 </div>
                 <div id="trkMapBox" class="hidden">
@@ -2848,7 +2855,7 @@ function renderPassesTable(passes) {
                             startBtn: $('trkStart'), pauseBtn: $('trkPause'), stopBtn: $('trkStop'),
                             bgSwitch: $('trkBgSwitch'), bgKnob: $('trkBgKnob'), bgNote: $('trkBgNote'), power: $('trkPower'),
                             status: $('trkStatus'), profile: $('trkProfile'), settings: $('trkSettings'), stats: $('trkStats'),
-                            filterNote: $('trkFilterNote'), gapNote: $('trkGapNote'), trackInfo: $('trkInfo'), chartBox: $('trkChartBox'),
+                            filterNote: $('trkFilterNote'), gapNote: $('trkGapNote'), trackInfo: $('trkInfo'), chartBox: $('trkChartBox'), chartModes: $('trkChartModes'), chartLegend: $('trkChartLegend'),
                             chart: $('trkChart'), mapBox: $('trkMapBox'), map: $('trkMap'), archive: $('trkArchive') }
             });
             return trkPanel;

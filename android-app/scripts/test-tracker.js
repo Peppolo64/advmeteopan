@@ -150,4 +150,24 @@ ok('formati: durata, passo, km/h, conversione dei punti', () => {
     assert.deepStrictEqual(C.speedSigma({ speedAcc: 0.4 }), { sigma: 0.4, estimated: false });
 });
 
+ok('curve di livello: decodifica Terrarium, intervallo per zoom, marching squares', () => {
+    assert.strictEqual(C.terrariumElevation(128, 0, 0), 0);
+    assert.strictEqual(C.terrariumElevation(130, 147, 128), 659.5);
+    assert.strictEqual(C.contourInterval(15), 10); assert.strictEqual(C.contourInterval(14), 10);
+    assert.strictEqual(C.contourInterval(13), 20); assert.strictEqual(C.contourInterval(12), 50); assert.strictEqual(C.contourInterval(8), 200);
+    // piano inclinato da 600 a 690 m da sinistra a destra: curve verticali a 610, 620, …, 690
+    const w = 10, h = 5, g = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) g[y * w + x] = 600 + x * 10 + 0.5;
+    const segs = C.contourSegments(g, w, h, 10);
+    const levels = [...new Set(segs.map(s => s[4]))].sort((a, b) => a - b);
+    assert.deepStrictEqual(levels, [610, 620, 630, 640, 650, 660, 670, 680, 690]);
+    segs.forEach(([x1, y1, x2, y2, L]) => { near(x1, (L - 600.5) / 10, 1e-9); near(x2, (L - 600.5) / 10, 1e-9); assert.strictEqual(Math.abs(y2 - y1), 1); });
+    assert.strictEqual(segs.length, 9 * (h - 1), 'una curva continua per livello');
+    // cupola: curve chiuse attorno alla cima
+    const n = 21, dome = new Float32Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) dome[y * n + x] = 700 - ((x - 10) ** 2 + (y - 10) ** 2) * 0.5;
+    const ring = C.contourSegments(dome, n, n, 10).filter(s => s[4] === 680);
+    assert.ok(ring.length > 8 && ring.every(([x1, y1, , , L]) => Math.abs(Math.hypot(x1 - 10, y1 - 10) - Math.sqrt(40)) < 0.5), 'curva a 680 m: cerchio di raggio √40');
+});
+
 console.log(`\n${n} test superati`);

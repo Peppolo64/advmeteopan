@@ -255,7 +255,39 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
     const fmtPace = mps => { if (!(mps > 0.3)) return '—'; const sPerKm = 1000 / mps; return `${Math.floor(sPerKm / 60)}:${String(Math.round(sPerKm % 60)).padStart(2, '0')} min/km`; };
     const kmh = (mps, d) => (mps * 3.6).toLocaleString('it-IT', { minimumFractionDigits: d === undefined ? 1 : d, maximumFractionDigits: d === undefined ? 1 : d });
 
-    const calc = { GAP_MS, DEFAULTS, PROFILES, settingsFor, normalizeSettings, distanceM, fromArray, toArray, speedSigma, gpsAltitude,
+    // ---------------------------------------------------------------- curve di livello
+    // Quote dai tile "Terrarium" (PNG: quota = R*256 + G + B/256 - 32768)
+    const terrariumElevation = (r, g, b) => r * 256 + g + b / 256 - 32768;
+    const contourInterval = z => z >= 14 ? 10 : z >= 13 ? 20 : z >= 12 ? 50 : z >= 10 ? 100 : 200;
+    // Marching squares su una griglia w×h di quote: segmenti [x1,y1,x2,y2,quota] per ogni curva multipla di step
+    function contourSegments(grid, w, h, step) {
+        const out = [];
+        for (let y = 0; y < h - 1; y++) for (let x = 0; x < w - 1; x++) {
+            const a = grid[y * w + x], b = grid[y * w + x + 1], c = grid[(y + 1) * w + x + 1], d = grid[(y + 1) * w + x];
+            const lo = Math.min(a, b, c, d), hi = Math.max(a, b, c, d);
+            for (let L = Math.ceil(lo / step) * step; L <= hi; L += step) {
+                if (L === lo && L === hi) continue;
+                const idx = (a >= L ? 8 : 0) | (b >= L ? 4 : 0) | (c >= L ? 2 : 0) | (d >= L ? 1 : 0);
+                if (idx === 0 || idx === 15) continue;
+                const t = (p, q) => (p === q ? 0.5 : (L - p) / (q - p));
+                const top = [x + t(a, b), y], right = [x + 1, y + t(b, c)], bottom = [x + t(d, c), y + 1], left = [x, y + t(a, d)];
+                const seg = (p1, p2) => out.push([p1[0], p1[1], p2[0], p2[1], L]);
+                switch (idx) {
+                    case 1: case 14: seg(left, bottom); break;
+                    case 2: case 13: seg(bottom, right); break;
+                    case 3: case 12: seg(left, right); break;
+                    case 4: case 11: seg(top, right); break;
+                    case 6: case 9: seg(top, bottom); break;
+                    case 7: case 8: seg(left, top); break;
+                    case 5: seg(left, top); seg(bottom, right); break;
+                    case 10: seg(top, right); seg(left, bottom); break;
+                }
+            }
+        }
+        return out;
+    }
+
+    const calc = { GAP_MS, DEFAULTS, PROFILES, terrariumElevation, contourInterval, contourSegments, settingsFor, normalizeSettings, distanceM, fromArray, toArray, speedSigma, gpsAltitude,
                    process, stats, speedSeries, toGpx, parseRecovered, fmtDuration, fmtPace, kmh };
 
     // =====================================================================
@@ -693,46 +725,111 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             renderButtons();
         }
 
+        // Modalità del grafico: 'speed' | 'alt' | 'both'
+        try { state.chartMode = localStorage.getItem('skyguardian.track.chart') || 'both'; } catch (e) { state.chartMode = 'both'; }
+        if (el.chartModes) el.chartModes.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+            state.chartMode = b.dataset.mode;
+            try { localStorage.setItem('skyguardian.track.chart', state.chartMode); } catch (e) { /* ignora */ }
+            render();
+        }));
         function drawChart(proc, st, now) {
             const c = el.chart;
             const w = c.clientWidth, h = c.clientHeight;
             if (!w || !h) return;
+            const mode = state.chartMode, showV = mode !== 'alt', showA = mode !== 'speed';
+            if (el.chartModes) el.chartModes.querySelectorAll('[data-mode]').forEach(b => {
+                const on = b.dataset.mode === mode;
+                b.classList.toggle('bg-blue-600', on); b.classList.toggle('text-white', on); b.classList.toggle('text-slate-300', !on);
+            });
+            if (el.chartLegend) el.chartLegend.innerHTML = [
+                showV && '<span class="text-sky-400">━</span> velocità', showV && '<span class="text-amber-400">┅</span> media',
+                showA && '<span class="text-emerald-400">━</span> altitudine', '<span class="text-red-400">■</span> senza GPS', '<span class="text-slate-400">■</span> pausa'].filter(Boolean).join(' · ');
             const dpr = Math.min(window.devicePixelRatio || 1, 3);
-            if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+            if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
             const ctx = c.getContext('2d');
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, w, h);
             const t0 = state.startedAt || (proc.points[0] && proc.points[0].t) || now, t1 = Math.max(now, t0 + 60000);
             const series = speedSeries(proc, { startedAt: t0, now: state.tracking ? now : null, paused: state.paused });
             const vmax = Math.max(10, ...series.map(s => s[1])) * 1.15;
-            const L = 34, B = 18, T = 8;
-            const X = t => L + (t - t0) / (t1 - t0) * (w - L - 6), Y = v => T + (1 - v / vmax) * (h - T - B);
-            ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = '#94a3b8'; ctx.strokeStyle = 'rgba(148,163,184,0.18)'; ctx.lineWidth = 1;
-            const step = vmax > 60 ? 20 : vmax > 25 ? 10 : 5;
-            for (let v = 0; v <= vmax; v += step) { ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(w - 6, Y(v)); ctx.stroke(); ctx.textAlign = 'right'; ctx.fillText(String(v), L - 4, Y(v) + 3); }
-            ctx.textAlign = 'center';
-            for (let k = 0; k <= 4; k++) { const t = t0 + (t1 - t0) * k / 4; ctx.fillText(fmtDuration(t - t0).replace(/^0:/, ''), Math.min(w - 16, Math.max(L + 10, X(t))), h - 4); }
+            const eles = proc.points.map(p => p.ele).filter(Number.isFinite);
+            let amin = eles.length ? Math.min(...eles) : 0, amax = eles.length ? Math.max(...eles) : 100;
+            const span = Math.max(20, amax - amin);
+            amin = Math.floor((amin - span * 0.1) / 5) * 5; amax = Math.ceil((amax + span * 0.1) / 5) * 5;
+            const L = showV ? 34 : 6, R = showA ? 40 : 6, B = 18, T = 8;
+            const X = t => L + (t - t0) / (t1 - t0) * (w - L - R);
+            const Yv = v => T + (1 - v / vmax) * (h - T - B), Ya = a => T + (1 - (a - amin) / (amax - amin)) * (h - T - B);
+            ctx.font = '10px system-ui, sans-serif'; ctx.lineWidth = 1;
+            // griglia e assi
+            const gridLine = y => { ctx.strokeStyle = 'rgba(148,163,184,0.18)'; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(w - R, y); ctx.stroke(); };
+            if (showV) {
+                const step = vmax > 60 ? 20 : vmax > 25 ? 10 : 5;
+                ctx.fillStyle = '#7dd3fc'; ctx.textAlign = 'right';
+                for (let v = 0; v <= vmax; v += step) { gridLine(Yv(v)); ctx.fillText(String(v), L - 4, Yv(v) + 3); }
+            }
+            if (showA) {
+                const rng = amax - amin, aStep = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find(s => rng / s <= 6) || 1000;
+                ctx.fillStyle = '#6ee7b7'; ctx.textAlign = 'left';
+                for (let a = Math.ceil(amin / aStep) * aStep; a <= amax; a += aStep) { if (!showV) gridLine(Ya(a)); ctx.fillText(String(a), w - R + 4, Ya(a) + 3); }
+            }
+            ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'center';
+            for (let k = 0; k <= 4; k++) { const t = t0 + (t1 - t0) * k / 4; ctx.fillText(fmtDuration(t - t0).replace(/^0:/, ''), Math.min(w - R - 10, Math.max(L + 10, X(t))), h - 4); }
+            // pause, pausa automatica, periodi senza GPS
             const band = (a, b, color) => { ctx.fillStyle = color; ctx.fillRect(X(a), T, Math.max(1, X(b) - X(a)), h - T - B); };
             proc.pauses.forEach(([a, b]) => band(a, b || now, 'rgba(148,163,184,0.22)'));
             proc.autoPauses.forEach(([a, b]) => band(a, b, 'rgba(148,163,184,0.10)'));
             st.gaps.forEach(g => band(g.from, g.to, 'rgba(239,68,68,0.16)'));
-            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.8; ctx.beginPath();
-            series.forEach(([t, v], i) => { const x = X(t), y = Y(v); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
-            ctx.stroke();
-            if (st.avg > 0) {
-                ctx.setLineDash([5, 4]); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.2;
-                ctx.beginPath(); ctx.moveTo(L, Y(st.avg * 3.6)); ctx.lineTo(w - 6, Y(st.avg * 3.6)); ctx.stroke(); ctx.setLineDash([]);
-                ctx.fillStyle = '#fbbf24'; ctx.textAlign = 'left'; ctx.fillText(`media ${kmh(st.avg)}`, L + 4, Y(st.avg * 3.6) - 3);
+            // altitudine (area tenue + linea), interrotta nei buchi
+            if (showA && eles.length) {
+                const segs = [];
+                proc.points.forEach(p => { if (!Number.isFinite(p.ele)) return; if (p.newSeg || !segs.length) segs.push([]); segs[segs.length - 1].push(p); });
+                segs.forEach(sg => {
+                    if (!showV && sg.length > 1) {
+                        ctx.fillStyle = 'rgba(52,211,153,0.15)'; ctx.beginPath();
+                        ctx.moveTo(X(sg[0].t), h - B); sg.forEach(p => ctx.lineTo(X(p.t), Ya(p.ele))); ctx.lineTo(X(sg[sg.length - 1].t), h - B); ctx.closePath(); ctx.fill();
+                    }
+                    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 1.8; ctx.beginPath();
+                    sg.forEach((p, i) => { if (i) ctx.lineTo(X(p.t), Ya(p.ele)); else ctx.moveTo(X(p.t), Ya(p.ele)); });
+                    ctx.stroke();
+                });
             }
-            ctx.fillStyle = '#64748b'; ctx.textAlign = 'left'; ctx.fillText('km/h', 2, h - 4);
+            // velocità e media
+            if (showV) {
+                ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.8; ctx.beginPath();
+                series.forEach(([t, v], i) => { const x = X(t), y = Yv(v); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+                ctx.stroke();
+                if (st.avg > 0) {
+                    ctx.setLineDash([5, 4]); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.2;
+                    ctx.beginPath(); ctx.moveTo(L, Yv(st.avg * 3.6)); ctx.lineTo(w - R, Yv(st.avg * 3.6)); ctx.stroke(); ctx.setLineDash([]);
+                    ctx.fillStyle = '#fbbf24'; ctx.textAlign = 'left'; ctx.fillText(`media ${kmh(st.avg)}`, L + 4, Yv(st.avg * 3.6) - 3);
+                }
+            }
+            ctx.textAlign = 'left';
+            if (showV) { ctx.fillStyle = '#7dd3fc'; ctx.fillText('km/h', 2, h - 4); }
+            if (showA) { ctx.fillStyle = '#6ee7b7'; ctx.textAlign = 'right'; ctx.fillText('m', w - 2, h - 4); }
         }
 
         function drawMap(proc) {
             if (!state.raw.length || !root.L || el.mapBox.classList.contains('hidden')) return;
             const L = root.L, pts = proc.points;
             if (!state.map) {
-                state.map = L.map(el.map, { zoomControl: true, attributionControl: true });
-                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(state.map);
+                state.map = L.map(el.map, { zoomControl: true, attributionControl: true, maxZoom: 18 });
+                const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+                const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, subdomains: 'abc', attribution: '© OpenTopoMap (CC-BY-SA), © OpenStreetMap' });
+                const contours = contourLayer(L);
+                osm.addTo(state.map); contours.addTo(state.map);
+                L.control.layers({ 'Stradale': osm, 'Topografica': topo }, { 'Curve di livello': contours }, { collapsed: true }).addTo(state.map);
+                const legend = L.control({ position: 'topleft' });
+                legend.onAdd = () => { const d = L.DomUtil.create('div'); d.style.cssText = 'background:rgba(15,23,42,.75);color:#e2e8f0;font:11px system-ui;padding:2px 6px;border-radius:4px'; state.contourLegend = d; return d; };
+                legend.addTo(state.map);
+                const updLegend = () => {
+                    if (!state.contourLegend) return;
+                    const on = state.map.hasLayer(contours), iv = contourInterval(Math.min(15, Math.round(state.map.getZoom())));
+                    state.contourLegend.textContent = on ? `Curve di livello ogni ${iv} m (marcate ogni ${iv * 5} m)` : '';
+                    state.contourLegend.style.display = on ? '' : 'none';
+                };
+                state.map.on('zoomend overlayadd overlayremove', updLegend);
+                state.updLegend = updLegend;
                 state.layers = L.layerGroup().addTo(state.map);
                 state.fitted = 0;
             }
@@ -754,11 +851,65 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             L.circleMarker([first.lat, first.lon], { radius: 6, color: '#22c55e', fillOpacity: 1 }).addTo(state.layers);
             L.circleMarker([last.lat, last.lon], { radius: 6, color: state.tracking ? '#f8fafc' : '#ef4444', fillOpacity: 1 }).addTo(state.layers);
             state.map.invalidateSize();
+            if (state.updLegend) setTimeout(state.updLegend, 0);
             const all = pts.map(p => [p.lat, p.lon]);
             if (!state.tracking || !state.fitted || pts.length - state.fitted > 30) {
                 if (all.length > 1) state.map.fitBounds(all, { padding: [20, 20], maxZoom: 17 }); else state.map.setView(all[0], 16);
                 state.fitted = pts.length;
             }
+        }
+
+        // Curve di livello calcolate dai tile di quota Terrarium (DEM SRTM/Copernicus, AWS Open Data)
+        function contourLayer(L) {
+            const Layer = L.GridLayer.extend({
+                createTile(coords, done) {
+                    const tile = document.createElement('canvas');
+                    const size = this.getTileSize();
+                    tile.width = size.x; tile.height = size.y;
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                        try { drawContours(tile, img, coords.z); } catch (e) { /* tile non leggibile */ }
+                        done(null, tile);
+                    };
+                    img.onerror = () => done(null, tile);
+                    img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${coords.z}/${coords.x}/${coords.y}.png`;
+                    return tile;
+                },
+            });
+            return new Layer({ maxNativeZoom: 15, maxZoom: 18, opacity: 0.9, attribution: 'Curve: DEM Terrarium (AWS)' });
+        }
+        function drawContours(tile, img, z) {
+            const S = 256, step = 2, n = S / step + 1;
+            const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+            const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+            const d = cx.getImageData(0, 0, S, S).data;
+            const raw = new Float32Array(S * S);
+            for (let i = 0; i < S * S; i++) raw[i] = terrariumElevation(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+            // griglia ogni 2 px, leggermente smussata (media 3×3) per curve meno seghettate
+            const g = new Float32Array(n * n);
+            for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+                const px = Math.min(S - 1, x * step), py = Math.min(S - 1, y * step);
+                let sum = 0, k = 0;
+                for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                    const qx = px + dx, qy = py + dy;
+                    if (qx >= 0 && qy >= 0 && qx < S && qy < S) { sum += raw[qy * S + qx]; k++; }
+                }
+                g[y * n + x] = sum / k;
+            }
+            const iv = contourInterval(z);
+            const segs = contourSegments(g, n, n, iv);
+            const ctx = tile.getContext('2d');
+            const scale = tile.width / S * step;
+            ctx.lineCap = 'round';
+            [[false, 'rgba(146,64,14,0.55)', 0.8], [true, 'rgba(120,53,15,0.9)', 1.6]].forEach(([major, color, lw]) => {
+                ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
+                segs.forEach(([x1, y1, x2, y2, Lv]) => {
+                    if ((Math.round(Lv / iv) % 5 === 0) !== major) return;
+                    ctx.moveTo(x1 * scale, y1 * scale); ctx.lineTo(x2 * scale, y2 * scale);
+                });
+                ctx.stroke();
+            });
         }
 
         // ---------- ciclo di vita ----------
