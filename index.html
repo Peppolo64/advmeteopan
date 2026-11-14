@@ -194,6 +194,7 @@
         .sg-fs > .sg-fs-grow { flex: 1 1 auto; min-height: 0; }
         .sg-fs #ephViewer, .sg-fs #smViewer { aspect-ratio: auto !important; max-height: none !important; height: 100%; }
         .sg-fs #ephLayerBar, .sg-fs #smLayerBar { overflow-y: auto; }
+        .sg-fs #trkMap { height: 100% !important; }
         /* Feedback visivo al click sui pulsanti del Pannello di Controllo */
         #controlPanel button {
             transition: filter 120ms ease, transform 120ms ease, background-color 150ms ease;
@@ -911,7 +912,7 @@
                     <canvas id="trkChart" class="w-full h-44 block"></canvas>
                 </div>
                 <div id="trkMapBox" class="hidden">
-                    <div id="trkMap" class="w-full h-72 rounded-lg border border-slate-700 z-0"></div>
+                    <div id="trkMap" class="sg-fs-grow w-full h-72 rounded-lg border border-slate-700 z-0"></div>
                 </div>
                 <div id="trkInfo" class="text-[11px] text-slate-400"></div>
                 <div>

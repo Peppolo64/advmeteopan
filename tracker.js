@@ -819,6 +819,21 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                 const contours = contourLayer(L);
                 osm.addTo(state.map); contours.addTo(state.map);
                 L.control.layers({ 'Stradale': osm, 'Topografica': topo }, { 'Curve di livello': contours }, { collapsed: true }).addTo(state.map);
+                state.map.on('baselayerchange', e => {
+                    if (e.name === 'Topografica' && state.map.hasLayer(contours)) { state.map.removeLayer(contours); state.contoursAuto = true; }
+                    else if (e.name === 'Stradale' && state.contoursAuto) { contours.addTo(state.map); state.contoursAuto = false; }
+                });
+                const fsCtl = L.control({ position: 'topright' });
+                fsCtl.onAdd = () => {
+                    const b = L.DomUtil.create('button', 'leaflet-bar');
+                    b.type = 'button'; b.dataset.fsTarget = 'trkMapBox'; b.title = 'Schermo intero'; b.textContent = '⛶';
+                    b.style.cssText = 'width:34px;height:34px;background:#fff;color:#111;font-size:16px;line-height:30px;cursor:pointer';
+                    L.DomEvent.disableClickPropagation(b);
+                    b.addEventListener('click', () => { if (root.toggleSkyFullscreen) root.toggleSkyFullscreen('trkMapBox'); });
+                    return b;
+                };
+                fsCtl.addTo(state.map);
+                if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => state.map.invalidateSize()).observe(el.map);
                 const legend = L.control({ position: 'topleft' });
                 legend.onAdd = () => { const d = L.DomUtil.create('div'); d.style.cssText = 'background:rgba(15,23,42,.75);color:#e2e8f0;font:11px system-ui;padding:2px 6px;border-radius:4px'; state.contourLegend = d; return d; };
                 legend.addTo(state.map);
@@ -859,57 +874,113 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             }
         }
 
-        // Curve di livello calcolate dai tile di quota Terrarium (DEM SRTM/Copernicus, AWS Open Data)
+        // Curve di livello calcolate dai tile di quota Terrarium (DEM SRTM/Copernicus, AWS Open Data).
+        // Disegnate alla risoluzione dello schermo e ricalcolate a ogni zoom (oltre lo zoom 15 dei dati si
+        // interpola la quota): niente ingrandimenti sgranati. La quota è ammorbidita alla risoluzione reale
+        // del dato (~30 m) per avere linee morbide invece che a gradini.
         function contourLayer(L) {
-            const Layer = L.GridLayer.extend({
-                createTile(coords, done) {
-                    const tile = document.createElement('canvas');
-                    const size = this.getTileSize();
-                    tile.width = size.x; tile.height = size.y;
+            const dems = new Map();
+            function loadDem(z, x, y) {
+                const key = `${z}/${x}/${y}`;
+                if (dems.has(key)) return dems.get(key);
+                const pr = new Promise(resolve => {
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
                     img.onload = () => {
-                        try { drawContours(tile, img, coords.z); } catch (e) { /* tile non leggibile */ }
-                        done(null, tile);
+                        try {
+                            const cv = document.createElement('canvas'); cv.width = 256; cv.height = 256;
+                            const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, 256, 256);
+                            const d = cx.getImageData(0, 0, 256, 256).data;
+                            const raw = new Float32Array(256 * 256);
+                            for (let i = 0; i < raw.length; i++) raw[i] = terrariumElevation(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+                            // risoluzione del dato ~30 m: sfocatura gaussiana di conseguenza
+                            const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 0.5) / 2 ** z))) * 180 / Math.PI;
+                            const mPerPx = 156543.03 * Math.cos(lat * Math.PI / 180) / 2 ** z;
+                            resolve(blurDem(raw, 256, Math.max(1.2, Math.min(4, 0.6 * 30 / mPerPx))));
+                        } catch (e) { resolve(null); }
                     };
-                    img.onerror = () => done(null, tile);
-                    img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${coords.z}/${coords.x}/${coords.y}.png`;
+                    img.onerror = () => resolve(null);
+                    img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+                });
+                dems.set(key, pr);
+                if (dems.size > 80) dems.delete(dems.keys().next().value);
+                return pr;
+            }
+            const Layer = L.GridLayer.extend({
+                createTile(coords, done) {
+                    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+                    const tile = document.createElement('canvas');
+                    tile.width = tile.height = Math.round(256 * dpr);
+                    tile.style.width = tile.style.height = '256px';
+                    const zData = Math.min(coords.z, 15), k = 2 ** (coords.z - zData);
+                    loadDem(zData, Math.floor(coords.x / k), Math.floor(coords.y / k)).then(dem => {
+                        if (dem) { try { drawContours(tile, dem, coords, k, dpr); } catch (e) { /* ignora */ } }
+                        done(null, tile);
+                    });
                     return tile;
                 },
             });
-            return new Layer({ maxNativeZoom: 15, maxZoom: 18, opacity: 0.9, attribution: 'Curve: DEM Terrarium (AWS)' });
+            return new Layer({ maxZoom: 19, opacity: 1, attribution: 'Curve: DEM Terrarium (AWS)' });
         }
-        function drawContours(tile, img, z) {
-            const S = 256, step = 2, n = S / step + 1;
-            const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
-            const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
-            const d = cx.getImageData(0, 0, S, S).data;
-            const raw = new Float32Array(S * S);
-            for (let i = 0; i < S * S; i++) raw[i] = terrariumElevation(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
-            // griglia ogni 2 px, leggermente smussata (media 3×3) per curve meno seghettate
-            const g = new Float32Array(n * n);
+        function blurDem(src, n, sigma) {
+            const r = Math.ceil(sigma * 2.5), kern = [];
+            let sum = 0;
+            for (let i = -r; i <= r; i++) { const v = Math.exp(-(i * i) / (2 * sigma * sigma)); kern.push(v); sum += v; }
+            kern.forEach((v, i) => { kern[i] = v / sum; });
+            const tmp = new Float32Array(n * n), out = new Float32Array(n * n);
+            const clampI = i => i < 0 ? 0 : i >= n ? n - 1 : i;
             for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-                const px = Math.min(S - 1, x * step), py = Math.min(S - 1, y * step);
-                let sum = 0, k = 0;
-                for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-                    const qx = px + dx, qy = py + dy;
-                    if (qx >= 0 && qy >= 0 && qx < S && qy < S) { sum += raw[qy * S + qx]; k++; }
-                }
-                g[y * n + x] = sum / k;
+                let v = 0; for (let i = -r; i <= r; i++) v += src[y * n + clampI(x + i)] * kern[i + r]; tmp[y * n + x] = v;
             }
-            const iv = contourInterval(z);
-            const segs = contourSegments(g, n, n, iv);
+            for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+                let v = 0; for (let i = -r; i <= r; i++) v += tmp[clampI(y + i) * n + x] * kern[i + r]; out[y * n + x] = v;
+            }
+            return out;
+        }
+        function drawContours(tile, dem, coords, k, dpr) {
+            const G = 97, cells = G - 1;                     // griglia di campionamento: ~2,7 px per cella
+            const span = 256 / k;                            // porzione del tile di quota coperta da questo tile
+            const ox = (coords.x % k) * span, oy = (coords.y % k) * span;
+            const sample = (sx, sy) => {
+                const x = Math.max(0, Math.min(254.999, sx - 0.5)), y = Math.max(0, Math.min(254.999, sy - 0.5));
+                const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+                const a = dem[y0 * 256 + x0], b = dem[y0 * 256 + x0 + 1], c = dem[(y0 + 1) * 256 + x0], d = dem[(y0 + 1) * 256 + x0 + 1];
+                return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+            };
+            const g = new Float32Array(G * G);
+            for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) g[j * G + i] = sample(ox + i / cells * span, oy + j / cells * span);
+            const iv = contourInterval(coords.z);
+            const segs = contourSegments(g, G, G, iv);
             const ctx = tile.getContext('2d');
-            const scale = tile.width / S * step;
-            ctx.lineCap = 'round';
-            [[false, 'rgba(146,64,14,0.55)', 0.8], [true, 'rgba(120,53,15,0.9)', 1.6]].forEach(([major, color, lw]) => {
-                ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.beginPath();
-                segs.forEach(([x1, y1, x2, y2, Lv]) => {
-                    if ((Math.round(Lv / iv) % 5 === 0) !== major) return;
-                    ctx.moveTo(x1 * scale, y1 * scale); ctx.lineTo(x2 * scale, y2 * scale);
-                });
+            const sc = tile.width / cells;
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            const isMajor = Lv => Math.round(Lv / iv) % 5 === 0;
+            [[false, 'rgba(146,84,30,0.55)', 0.9], [true, 'rgba(120,53,15,0.85)', 1.6]].forEach(([major, color, lw]) => {
+                ctx.strokeStyle = color; ctx.lineWidth = lw * dpr; ctx.beginPath();
+                segs.forEach(([x1, y1, x2, y2, Lv]) => { if (isMajor(Lv) !== major) return; ctx.moveTo(x1 * sc, y1 * sc); ctx.lineTo(x2 * sc, y2 * sc); });
                 ctx.stroke();
             });
+            // etichette di quota sulle curve marcate (una per livello, vicino al centro del tile)
+            if (coords.z >= 13) {
+                const best = new Map();
+                segs.forEach(sg => {
+                    if (!isMajor(sg[4])) return;
+                    const mx = (sg[0] + sg[2]) / 2 - cells / 2, my = (sg[1] + sg[3]) / 2 - cells / 2, d = mx * mx + my * my;
+                    if (!best.has(sg[4]) || d < best.get(sg[4]).d) best.set(sg[4], { d, sg });
+                });
+                ctx.font = `600 ${10 * dpr}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                best.forEach(({ sg }, Lv) => {
+                    const [x1, y1, x2, y2] = sg;
+                    let ang = Math.atan2(y2 - y1, x2 - x1);
+                    if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+                    const cx = (x1 + x2) / 2 * sc, cy = (y1 + y2) / 2 * sc;
+                    if (cx < 20 * dpr || cy < 10 * dpr || cx > tile.width - 20 * dpr || cy > tile.height - 10 * dpr) return;
+                    ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+                    ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.strokeText(String(Lv), 0, 0);
+                    ctx.fillStyle = 'rgba(120,53,15,1)'; ctx.fillText(String(Lv), 0, 0);
+                    ctx.restore();
+                });
+            }
         }
 
         // ---------- ciclo di vita ----------
