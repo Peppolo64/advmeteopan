@@ -44,8 +44,8 @@ jobs:
         run: |
           M=android/app/src/main/AndroidManifest.xml
           echo "--- $M"; cat "$M"
-          # WAKE_LOCK e REQUEST_IGNORE_BATTERY_OPTIMIZATIONS sono ammessi solo per il percorso in background (TrackingService)
-          if grep -nE '<receiver|RECEIVE_BOOT_COMPLETED|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|ACCESS_BACKGROUND_LOCATION|SYSTEM_ALERT_WINDOW' "$M"; then
+          # WAKE_LOCK è ammesso solo per il percorso in background (TrackingService)
+          if grep -nE '<receiver|RECEIVE_BOOT_COMPLETED|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|REQUEST_IGNORE_BATTERY_OPTIMIZATIONS|ACCESS_BACKGROUND_LOCATION|SYSTEM_ALERT_WINDOW' "$M"; then
             echo "::error::Il manifest dichiara receiver o permessi per lavorare in background"; exit 1
           fi
           # Unico servizio ammesso: TrackingService, in primo piano (notifica visibile), tipo "location", non esportato
@@ -58,7 +58,7 @@ jobs:
           fi
           grep -q 'android:allowBackup="false"' "$M" || { echo "::error::allowBackup non è false"; exit 1; }
           grep -q 'android:usesCleartextTraffic="false"' "$M" || { echo "::error::traffico in chiaro non disattivato"; exit 1; }
-          echo "OK: solo il servizio del percorso GPS (in primo piano, con notifica; wake lock ed esenzione batteria solo per lui), nessun receiver/avvio automatico/posizione in background, backup disattivato, solo HTTPS"
+          echo "OK: solo il servizio del percorso GPS (in primo piano, con notifica; wake lock solo per lui), nessun receiver/avvio automatico/posizione in background, backup disattivato, solo HTTPS"
 
       - name: Versione (da version.js)
         run: |

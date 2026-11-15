@@ -96,17 +96,27 @@ public class TrackerPlugin extends Plugin {
     @PluginMethod
     public void powerStatus(PluginCall call) { call.resolve(power()); }
 
-    // Riquadro di sistema "Consentire all'app di funzionare sempre in background?"
+    // Batteria dell'app: apre la scheda dell'app, dove si sceglie Senza restrizioni / Ottimizzata / Con restrizioni
+    // (nessun riquadro automatico: la scelta resta all'utente e si può tornare a «Ottimizzata» quando si vuole)
     @PluginMethod
     public void requestBatteryExemption(PluginCall call) {
-        try {
-            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getContext().getPackageName()));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(i);
-            call.resolve();
-        } catch (Exception e) {
-            openAppSettings(call);
+        openAppSettings(call);
+    }
+
+    // Schermata del risparmio energetico (su Samsung: Batteria → Risparmio energetico)
+    @PluginMethod
+    public void openBatterySaverSettings(PluginCall call) {
+        String[] actions = { Settings.ACTION_BATTERY_SAVER_SETTINGS, Intent.ACTION_POWER_USAGE_SUMMARY, Settings.ACTION_SETTINGS };
+        for (String action : actions) {
+            try {
+                Intent i = new Intent(action);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(i);
+                call.resolve();
+                return;
+            } catch (Exception ignored) { }
         }
+        call.reject("Impossibile aprire le impostazioni del risparmio energetico");
     }
 
     // Schermata dell'app nelle impostazioni (Batteria → Senza restrizioni, Consenti attività in background)

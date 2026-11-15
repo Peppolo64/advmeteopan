@@ -366,14 +366,18 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             const samsung = /samsung/i.test(P.manufacturer || '');
             el.power.innerHTML = `<div class="bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-1.5 text-[12px] text-slate-300">
                 <div class="text-[11px] uppercase tracking-wide text-slate-400">Per registrare senza interruzioni</div>
-                ${row(P.ignoringBatteryOptimizations, 'Esenzione dall\'ottimizzazione batteria' + (P.ignoringBatteryOptimizations ? '' : ': senza, Android può sospendere il GPS'), btn('exempt', 'Consenti'))}
+                ${row(P.ignoringBatteryOptimizations, 'Batteria dell\'app: <b>Senza restrizioni</b>' + (P.ignoringBatteryOptimizations ? '' : ' (ora è «Ottimizzata»: Android può sospendere il GPS a schermo spento)'), btn('exempt', 'Scegli'))}
                 ${row(!P.backgroundRestricted, samsung ? '«Consenti attività in background» nella scheda dell\'app (Batteria: <b>Senza restrizioni</b>)' : 'Attività in background consentita', btn('settings', 'Apri impostazioni'))}
                 ${row(P.notifications, 'Notifiche (per vedere «SkyGuardian sta registrando» con Pausa e Ferma)', btn('settings', 'Apri impostazioni'))}
-                ${P.powerSaveMode ? `<div class="flex items-start gap-2"><span>🔋</span><div>Risparmio energetico attivo${samsung ? ': con il risparmio <b>Massimo</b> SkyGuardian deve essere tra le app consentite (come hai già fatto)' : ''}. Il servizio con notifica e il processore sveglio continuano a registrare.</div></div>` : ''}
+                <div class="flex items-start gap-2"><span>🔋</span><div class="flex-1">Risparmio energetico ${P.powerSaveMode ? '<b>attivo</b>' : 'non attivo'}${samsung ? '. Con il risparmio Standard o Massimo SkyGuardian deve essere tra le app consentite e la sua batteria «Senza restrizioni»' : ''}. Il servizio con notifica e il processore sveglio continuano a registrare.</div>${btn('saver', 'Modifica')}</div>
                 ${P.fullGnssSupported ? '' : '<div class="text-[11px] text-slate-500">Tracciamento GNSS completo non disponibile (serve Android 12+).</div>'}
             </div>`;
             el.power.querySelectorAll('[data-pw]').forEach(b => b.addEventListener('click', async () => {
-                try { if (b.dataset.pw === 'exempt') await plugin.requestBatteryExemption(); else await plugin.openAppSettings(); } catch (e) { say(e.message || String(e)); }
+                try {
+                    if (b.dataset.pw === 'exempt') await plugin.requestBatteryExemption();
+                    else if (b.dataset.pw === 'saver') await plugin.openBatterySaverSettings();
+                    else await plugin.openAppSettings();
+                } catch (e) { say(e.message || String(e)); }
             }));
         }
 
