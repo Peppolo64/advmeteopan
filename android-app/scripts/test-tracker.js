@@ -170,4 +170,53 @@ ok('curve di livello: decodifica Terrarium, intervallo per zoom, marching square
     assert.ok(ring.length > 8 && ring.every(([x1, y1, , , L]) => Math.abs(Math.hypot(x1 - 10, y1 - 10) - Math.sqrt(40)) < 0.5), 'curva a 680 m: cerchio di raggio √40');
 });
 
+// Battiti simulati: [ora, elapsed, uptime, visti, usati, gps, schermo, senza restrizioni, risparmio]
+function beatsFrom(t0, t1, opts) {
+    const o = Object.assign({ every: 5000, sleepFrom: null, sleepTo: null, vis: 12, used: 9, unr: 1, saver: 2, screen: 0 }, opts);
+    const out = []; let el = 1e6, up = 1e6;
+    for (let t = t0; t <= t1; t += o.every) {
+        const asleep = o.sleepFrom !== null && t > o.sleepFrom && t <= o.sleepTo;
+        el += o.every; up += asleep ? 200 : o.every;   // nel sonno profondo uptime quasi fermo
+        out.push([t, el, up, o.vis, o.used, 1, o.screen, o.unr, o.saver]);
+    }
+    return out;
+}
+
+ok('app sospesa: battiti mancanti o processore addormentato (indipendente dal GPS)', () => {
+    const B = C.fromBeat;
+    assert.deepStrictEqual(C.suspendedIntervals(beatsFrom(T0, T0 + 300000).map(B), { startedAt: T0, end: T0 + 300000 }), [], 'battiti regolari: mai sospesa');
+    const missing = beatsFrom(T0, T0 + 100000).concat(beatsFrom(T0 + 220000, T0 + 300000)).map(B);
+    assert.deepStrictEqual(C.suspendedIntervals(missing, { startedAt: T0, end: T0 + 300000 }), [[T0 + 105000, T0 + 220000]], 'app congelata: battiti assenti');
+    const sleep = beatsFrom(T0, T0 + 300000, { sleepFrom: T0 + 100000, sleepTo: T0 + 200000 }).map(B);
+    const s1 = C.suspendedIntervals(sleep, { startedAt: T0, end: T0 + 300000 });
+    assert.strictEqual(s1.length, 1); near(s1[0][0], T0 + 100000, 1); near(s1[0][1], T0 + 200000, 1);
+    const tail = C.suspendedIntervals(beatsFrom(T0, T0 + 100000).map(B), { startedAt: T0, end: T0 + 300000 });
+    assert.deepStrictEqual(tail, [[T0 + 105000, T0 + 300000]], 'sospesa fino alla fine');
+    const paused = C.suspendedIntervals(missing, { startedAt: T0, end: T0 + 300000, pauses: [[T0 + 100500, T0 + 219000]] });
+    assert.deepStrictEqual(paused, [[T0 + 219000, T0 + 220000]].filter(([a, b]) => b - a >= 1000), 'la pausa manuale non è sospensione');
+    assert.strictEqual(C.suspendedIntervals([], {}), null, 'senza battiti: non classificabile');
+});
+
+ok('buchi GPS classificati: giallo (app sospesa) e rosso (senza segnale, con satelliti)', () => {
+    const pts = walk(100, 5).concat(walk(100, 5, { from: 200 }), walk(100, 5, { from: 400 }));   // buchi 100-200 s e 300-400 s
+    // 100-200 s: app attiva (battiti), 0 satelliti usati -> senza segnale; 300-400 s: battiti assenti -> app sospesa
+    const beats = beatsFrom(T0, T0 + 200000).map((b, i) => (b[0] > T0 + 100000 && b[0] < T0 + 200000) ? Object.assign(b.slice(), { 3: 7, 4: 0 }) : b)
+        .concat(beatsFrom(T0 + 400000, T0 + 499000));
+    const { st } = run(pts, RAW, { now: T0 + 499000, beats });
+    assert.ok(st.classified);
+    assert.strictEqual(st.noSignal.length, 1); assert.strictEqual(st.suspended.length, 1);
+    near(st.noSignalTime, 101000, 6000, 'senza segnale'); near(st.suspendedTime, 101000, 6000, 'app sospesa');
+    assert.deepStrictEqual(st.noSignalSats, { used: 0, visible: 7, gpsOff: false });
+    assert.deepStrictEqual(st.conditions, { unrestricted: true, saver: 2, screenOffPct: 100 });
+    const old = run(pts, RAW, { now: T0 + 499000 }).st;
+    assert.ok(!old.classified && old.gapTime > 0, 'percorsi senza battiti: buchi non classificati');
+});
+
+ok('recupero con i battiti e intervalli', () => {
+    const r = C.parseRecovered(['S,1800000000000,1,{}', 'H,1800000005000,100,90,12,9,1,0,1,2', 'T,1800000006000,38.1,13.36,4,5,0.3,100,143,5,1000,20,6,90']);
+    assert.deepStrictEqual(r.beats, [[1800000005000, 100, 90, 12, 9, 1, 0, 1, 2]]);
+    assert.deepStrictEqual(C.subtractIntervals([[0, 10000]], [[2000, 3000]]), [[0, 2000], [3000, 10000]]);
+    assert.deepStrictEqual(C.intersectIntervals([[0, 10000]], [[5000, 20000]]), [[5000, 10000]]);
+});
+
 console.log(`\n${n} test superati`);

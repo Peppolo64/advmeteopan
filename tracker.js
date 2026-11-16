@@ -143,6 +143,61 @@
         return { points: kept, rejected, autoPauses, pauses, settings: S, elevationSource: source, gapMs };
     }
 
+    // ---------------------------------------------------------------- app sospesa o GPS senza segnale?
+    // Battiti ogni 5 s indipendenti dal GPS: [ora, elapsedRealtime, uptimeMillis, satelliti visti, usati, GPS acceso,
+    // schermo acceso, batteria senza restrizioni, livello risparmio (0 spento, 1 standard, 2 massimo)].
+    // elapsedRealtime avanza anche quando il processore dorme, uptimeMillis no: la differenza è il sonno.
+    const BEAT_MS = 5000;
+    const fromBeat = a => ({ t: +a[0], el: +a[1], up: +a[2], vis: +a[3], used: +a[4], gps: +a[5], screen: +a[6], unr: +a[7], saver: +a[8] });
+    function subtractIntervals(list, cuts) {
+        let out = list.map(x => x.slice());
+        cuts.forEach(([c0, c1]) => {
+            const next = [];
+            out.forEach(([a, b]) => {
+                if (c1 <= a || c0 >= b) { next.push([a, b]); return; }
+                if (c0 > a) next.push([a, c0]);
+                if (c1 < b) next.push([c1, b]);
+            });
+            out = next;
+        });
+        return out.filter(([a, b]) => b - a >= 1000);
+    }
+    function intersectIntervals(a, b) {
+        const out = [];
+        a.forEach(([a0, a1]) => b.forEach(([b0, b1]) => { const lo = Math.max(a0, b0), hi = Math.min(a1, b1); if (hi - lo >= 1000) out.push([lo, hi]); }));
+        return out;
+    }
+    // Periodi in cui l'app era sospesa: battiti mancanti (app congelata o processore spento) o sonno rilevato dai due orologi.
+    // null se il percorso non ha battiti (registrazioni precedenti): i buchi non sono classificabili.
+    function suspendedIntervals(beats, opts) {
+        opts = opts || {};
+        if (!beats || !beats.length) return null;
+        const out = [];
+        const add = (a, b) => {
+            if (b - a < 1000) return;
+            const last = out[out.length - 1];
+            if (last && a - last[1] < 1500) last[1] = Math.max(last[1], b); else out.push([a, b]);
+        };
+        if (opts.startedAt && beats[0].t - opts.startedAt > 2.5 * BEAT_MS) add(opts.startedAt + BEAT_MS, beats[0].t);
+        for (let i = 1; i < beats.length; i++) {
+            const a = beats[i - 1], b = beats[i], dWall = b.t - a.t;
+            const sleep = (b.el - a.el) - (b.up - a.up);
+            if (dWall > 2.5 * BEAT_MS) add(a.t + BEAT_MS, b.t);
+            else if (sleep > 0.5 * dWall) add(a.t, b.t);
+        }
+        const last = beats[beats.length - 1];
+        if (opts.end && opts.end - last.t > 2.5 * BEAT_MS) add(last.t + BEAT_MS, opts.end);
+        // durante le pause manuali i battiti sono fermi per scelta: non è sospensione
+        return subtractIntervals(out, (opts.pauses || []).map(([a, b]) => [a, b || opts.end || Infinity]));
+    }
+    // Condizioni energetiche prevalenti durante la registrazione
+    function conditionsOf(beats) {
+        const bs = (beats || []).filter(b => Number.isFinite(b.unr) && b.unr >= 0);
+        if (!bs.length) return null;
+        const count = f => { const m = new Map(); bs.forEach(b => m.set(f(b), (m.get(f(b)) || 0) + 1)); return [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]; };
+        return { unrestricted: count(b => b.unr === 1), saver: count(b => b.saver), screenOffPct: bs.filter(b => b.screen === 0).length / bs.length * 100 };
+    }
+
     // ---------------------------------------------------------------- statistiche
     function stats(proc, opts) {
         opts = opts || {};
@@ -163,6 +218,21 @@
             proc.pauses.forEach(([pa, pb]) => { free -= Math.max(0, Math.min(b, pb || end) - Math.max(a, pa)); });
             if (free > proc.gapMs) { out.gaps.push({ from: a, to: b }); out.gapTime += free; }
         });
+        // classificazione dei buchi: app sospesa (giallo) o GPS senza segnale con app attiva (rosso)
+        const beats = (opts.beats || []).map(b => Array.isArray(b) ? fromBeat(b) : b);
+        const susp = suspendedIntervals(beats, { startedAt, end, pauses: proc.pauses });
+        out.classified = !!susp;
+        const holeList = subtractIntervals(out.gaps.map(g => [g.from, g.to]), proc.pauses.map(([a, b]) => [a, b || end]));
+        out.suspended = susp ? intersectIntervals(holeList, susp).map(([from, to]) => ({ from, to })) : [];
+        out.noSignal = susp ? subtractIntervals(holeList, susp).filter(([a, b]) => b - a > 3000).map(([from, to]) => ({ from, to })) : [];
+        out.suspendedTime = out.suspended.reduce((s, g) => s + g.to - g.from, 0);
+        out.noSignalTime = out.noSignal.reduce((s, g) => s + g.to - g.from, 0);
+        if (out.noSignal.length) {
+            const inNs = beats.filter(b => out.noSignal.some(g => b.t >= g.from && b.t <= g.to) && b.vis >= 0);
+            const med = arr => { const v = arr.slice().sort((x, y) => x - y); return v[v.length >> 1]; };
+            if (inNs.length) out.noSignalSats = { used: med(inNs.map(b => b.used)), visible: med(inNs.map(b => b.vis)), gpsOff: inNs.some(b => b.gps === 0) };
+        }
+        out.conditions = conditionsOf(beats);
         const speeds = [];
         let ref = NaN;
         const threshold = proc.elevationSource === 'gps' ? 5 : 1.5;
@@ -237,18 +307,19 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
 `;
     }
 
-    // File di recupero nativo (TrackStore): righe S,/T,/P,/R,
+    // File di recupero nativo (TrackStore): righe S,/T,/H,/P,/R,
     function parseRecovered(lines) {
         let startedAt = 0, background = false, settings = {};
-        const points = [], pauses = [];
+        const points = [], pauses = [], beats = [];
         (lines || []).forEach(l => {
             const parts = l.split(',');
             if (parts[0] === 'S') { startedAt = +parts[1]; background = parts[2] === '1'; try { settings = JSON.parse(parts.slice(3).join(',')); } catch (e) { /* ignora */ } }
             else if (parts[0] === 'T') points.push(parts.slice(1).map(v => v === '' ? null : +v));
+            else if (parts[0] === 'H') beats.push(parts.slice(1).map(Number));
             else if (parts[0] === 'P') pauses.push([+parts[1], 0]);
             else if (parts[0] === 'R' && pauses.length) pauses[pauses.length - 1][1] = +parts[1];
         });
-        return { startedAt, background, settings, points, pauses };
+        return { startedAt, background, settings, points, pauses, beats };
     }
 
     const fmtDuration = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
@@ -287,7 +358,8 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
         return out;
     }
 
-    const calc = { GAP_MS, DEFAULTS, PROFILES, terrariumElevation, contourInterval, contourSegments, settingsFor, normalizeSettings, distanceM, fromArray, toArray, speedSigma, gpsAltitude,
+    const SAVER_LABELS = ['spento', 'Standard', 'Massimo'];
+    const calc = { GAP_MS, BEAT_MS, SAVER_LABELS, fromBeat, subtractIntervals, intersectIntervals, suspendedIntervals, conditionsOf, DEFAULTS, PROFILES, terrariumElevation, contourInterval, contourSegments, settingsFor, normalizeSettings, distanceM, fromArray, toArray, speedSigma, gpsAltitude,
                    process, stats, speedSeries, toGpx, parseRecovered, fmtDuration, fmtPace, kmh };
 
     // =====================================================================
@@ -361,15 +433,15 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
         function renderPower() {
             if (!plugin || !bgOn() || !state.power) { el.power.innerHTML = ''; return; }
             const P = state.power;
-            const row = (ok, text, btn) => `<div class="flex items-start gap-2"><span>${ok ? '✅' : '⚠️'}</span><div class="flex-1">${text}</div>${!ok && btn ? btn : ''}</div>`;
+            const row = (ok, text, btn) => `<div class="flex items-start gap-2"><span>${ok ? '✅' : '⚠️'}</span><div class="flex-1">${text}</div>${btn || ''}</div>`;
             const btn = (id, t) => `<button type="button" data-pw="${id}" class="shrink-0 text-[11px] px-2 py-0.5 rounded border border-slate-500 text-slate-100 hover:bg-slate-700">${t}</button>`;
             const samsung = /samsung/i.test(P.manufacturer || '');
             el.power.innerHTML = `<div class="bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-1.5 text-[12px] text-slate-300">
                 <div class="text-[11px] uppercase tracking-wide text-slate-400">Per registrare senza interruzioni</div>
-                ${row(P.ignoringBatteryOptimizations, 'Batteria dell\'app: <b>Senza restrizioni</b>' + (P.ignoringBatteryOptimizations ? '' : ' (ora è «Ottimizzata»: Android può sospendere il GPS a schermo spento)'), btn('exempt', 'Scegli'))}
+                ${row(P.ignoringBatteryOptimizations, 'Batteria dell\'app: ' + (P.ignoringBatteryOptimizations ? '<b>Senza restrizioni</b>' : '<b>Ottimizzata</b> (Android può sospendere il GPS a schermo spento; per registrare: Senza restrizioni)'), btn('exempt', 'Scegli'))}
                 ${row(!P.backgroundRestricted, samsung ? '«Consenti attività in background» nella scheda dell\'app (Batteria: <b>Senza restrizioni</b>)' : 'Attività in background consentita', btn('settings', 'Apri impostazioni'))}
                 ${row(P.notifications, 'Notifiche (per vedere «SkyGuardian sta registrando» con Pausa e Ferma)', btn('settings', 'Apri impostazioni'))}
-                <div class="flex items-start gap-2"><span>🔋</span><div class="flex-1">Risparmio energetico ${P.powerSaveMode ? '<b>attivo</b>' : 'non attivo'}${samsung ? '. Con il risparmio Standard o Massimo SkyGuardian deve essere tra le app consentite e la sua batteria «Senza restrizioni»' : ''}. Il servizio con notifica e il processore sveglio continuano a registrare.</div>${btn('saver', 'Modifica')}</div>
+                <div class="flex items-start gap-2"><span>🔋</span><div class="flex-1">Risparmio energetico ${P.saverLevel === 2 ? '<b>attivo (MASSIMO)</b>' : P.powerSaveMode ? '<b>attivo (STANDARD)</b>' : '<b>non attivo</b>'}${samsung ? '. Con il risparmio Standard o Massimo SkyGuardian deve essere tra le app consentite e la sua batteria «Senza restrizioni»' : ''}. Il servizio con notifica e il processore sveglio continuano a registrare.</div>${btn('saver', 'Modifica')}</div>
                 ${P.fullGnssSupported ? '' : '<div class="text-[11px] text-slate-500">Tracciamento GNSS completo non disponibile (serve Android 12+).</div>'}
             </div>`;
             el.power.querySelectorAll('[data-pw]').forEach(b => b.addEventListener('click', async () => {
@@ -496,7 +568,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
         async function startTrack() {
             const background = bgOn();
             stopPreview();
-            state.raw = []; state.pauses = []; state.viewing = null; state.paused = false; state.background = background; state.endedAt = 0;
+            state.raw = []; state.pauses = []; state.beats = []; state.viewing = null; state.paused = false; state.background = background; state.endedAt = 0;
             state.trackSettings = normalizeSettings(state.settings);
             if (plugin) {
                 try {
@@ -509,6 +581,12 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                 if (!navigator.geolocation) { say('Geolocalizzazione non disponibile su questo browser.'); return; }
                 state.startedAt = Date.now();
                 startBrowserWatch();
+                // nel browser i battiti li fa la pagina: con la pagina in secondo piano i timer rallentano e i battiti mancano
+                state.webBeat = setInterval(() => {
+                    if (!state.tracking || state.paused) return;
+                    const t = Date.now(), pn = Math.round(performance.now());
+                    state.beats.push([t, pn, pn, -1, -1, 1, document.visibilityState === 'visible' ? 1 : 0, -1, -1]);
+                }, BEAT_MS);
             }
             state.tracking = true;
             renderAll();
@@ -556,16 +634,19 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                 removeHandle();
             }
             if (state.watchId !== null) { navigator.geolocation.clearWatch(state.watchId); state.watchId = null; }
+            clearInterval(state.webBeat);
             if (state.paused) closePause(Date.now());
             state.paused = false;
             state.endedAt = Date.now();
-            await saveToArchive({ startedAt: state.startedAt, endedAt: state.endedAt, background: state.background, settings: state.trackSettings, raw: state.raw, pauses: state.pauses });
+            await saveToArchive({ startedAt: state.startedAt, endedAt: state.endedAt, background: state.background, settings: state.trackSettings, raw: state.raw, pauses: state.pauses, beats: state.beats });
             renderAll();
             if (state.open && document.visibilityState !== 'hidden') startPreview();
         }
         async function syncPoints() {
             if (!plugin) return;
-            const r = await plugin.getPoints({ from: state.raw.length });
+            if (!state.beats) state.beats = [];
+            const r = await plugin.getPoints({ from: state.raw.length, beatsFrom: state.beats.length });
+            if (Array.isArray(r.beats) && r.beatsFrom === state.beats.length) r.beats.forEach(b => state.beats.push(b.map(Number)));
             (r.points || []).map(fromArray).forEach(p => { if (!state.raw.length || p.t > state.raw[state.raw.length - 1].t) state.raw.push(p); });
             if (Array.isArray(r.pauses)) state.pauses = r.pauses.map(([a, b]) => [+a, +b || 0]);
             if (typeof r.paused === 'boolean') state.paused = r.paused;
@@ -574,16 +655,19 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
         // ---------- archivio ----------
         function summaryOf(rec) {
             const proc = process(rec.raw, { settings: rec.settings, pauses: rec.pauses, geoidN: state.geoidN });
-            const st = stats(proc, { startedAt: rec.startedAt, now: rec.endedAt });
-            return { distance: st.distance, elapsed: st.elapsed, avg: st.avg, points: proc.points.length };
+            const st = stats(proc, { startedAt: rec.startedAt, now: rec.endedAt, beats: rec.beats });
+            return { distance: st.distance, elapsed: st.elapsed, avg: st.avg, points: proc.points.length, classified: st.classified,
+                     suspendedTime: st.suspendedTime, noSignalTime: st.noSignalTime, gapTime: st.gapTime, conditions: st.conditions };
         }
         async function saveToArchive(t, nameSuffix) {
             if (!t.raw.length) { say('Percorso senza punti: non salvato.', 4000); return null; }
             const d = new Date(t.startedAt);
             const rec = { id: 't' + t.startedAt, name: `Percorso ${d.toLocaleDateString('it-IT')} ${d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}${nameSuffix || ''}`,
                           startedAt: t.startedAt, endedAt: t.endedAt, background: !!t.background, settings: normalizeSettings(t.settings), pauses: t.pauses,
-                          points: t.raw.map(toArray), version };
-            rec.summary = summaryOf({ raw: t.raw, settings: rec.settings, pauses: rec.pauses, startedAt: rec.startedAt, endedAt: rec.endedAt });
+                          points: t.raw.map(toArray), beats: t.beats || [], version };
+            rec.summary = summaryOf({ raw: t.raw, settings: rec.settings, pauses: rec.pauses, startedAt: rec.startedAt, endedAt: rec.endedAt, beats: rec.beats });
+            const c = rec.summary.conditions;
+            rec.labels = c ? { battery: c.unrestricted ? 'unrestricted' : 'optimized', saver: c.saver } : null;   // correggibili dall'archivio
             try { await archive.put(rec); state.viewing = rec.id; await refreshArchive(); say(`💾 Salvato nell'archivio: ${rec.name}`, 4000); }
             catch (e) { say('Archivio non disponibile: ' + (e.message || e) + '. Esporta il GPX per non perdere il percorso.'); }
             return rec;
@@ -597,15 +681,51 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             el.archive.innerHTML = state.archive.map(r => {
                 const s = r.summary || {};
                 const on = state.viewing === r.id && !state.tracking;
+                const lb = r.labels;
+                const cond = lb ? `<div class="flex flex-wrap items-center gap-1 mt-1 text-[11px]">
+                        <select data-lab="battery" data-id="${r.id}" class="px-1 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-200">
+                            <option value="unrestricted" ${lb.battery === 'unrestricted' ? 'selected' : ''}>🔋 Senza restrizioni</option>
+                            <option value="optimized" ${lb.battery === 'optimized' ? 'selected' : ''}>🔋 Ottimizzata</option></select>
+                        <select data-lab="saver" data-id="${r.id}" class="px-1 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-200">
+                            ${SAVER_LABELS.map((l, i) => `<option value="${i}" ${+lb.saver === i ? 'selected' : ''}>⚡ Risparmio ${l}</option>`).join('')}</select>
+                        ${s.classified ? `<span class="${s.suspendedTime > 0 ? 'text-yellow-300' : 'text-emerald-300'}">app sospesa ${fmtDuration(s.suspendedTime)}</span> · <span class="${s.noSignalTime > 0 ? 'text-red-300' : 'text-slate-400'}">senza segnale ${fmtDuration(s.noSignalTime)}</span>` : ''}
+                    </div>` : (s.gapTime ? `<div class="text-[11px] text-slate-500 mt-1">registrato prima della 2.2: buchi (${fmtDuration(s.gapTime)}) non classificabili</div>` : '');
                 return `<div class="flex flex-wrap items-center gap-2 p-2 rounded-lg border ${on ? 'border-blue-500 bg-blue-950/30' : 'border-slate-700 bg-slate-900/40'}">
                     <div class="flex-1 min-w-[10rem]"><div class="text-sm text-white">${esc(r.name)}</div>
-                    <div class="text-[11px] text-slate-400">${((s.distance || 0) / 1000).toLocaleString('it-IT', { maximumFractionDigits: 2 })} km · ${fmtDuration(s.elapsed || 0)} · media ${kmh(s.avg || 0)} km/h${r.background ? ' · background' : ''}${r.settings ? ' · ' + esc((PROFILES[r.settings.profile] || { label: 'personalizzato' }).label.toLowerCase()) : ''}</div></div>
+                    <div class="text-[11px] text-slate-400">${((s.distance || 0) / 1000).toLocaleString('it-IT', { maximumFractionDigits: 2 })} km · ${fmtDuration(s.elapsed || 0)} · media ${kmh(s.avg || 0)} km/h${r.background ? ' · background' : ''}${r.settings ? ' · ' + esc((PROFILES[r.settings.profile] || { label: 'personalizzato' }).label.toLowerCase()) : ''}</div>${cond}</div>
                     <button type="button" data-a="open" data-id="${r.id}" class="text-[11px] px-2 py-1 rounded border border-slate-600 text-slate-100 hover:bg-slate-700">👁 Apri</button>
                     <button type="button" data-a="gpx" data-id="${r.id}" class="text-[11px] px-2 py-1 rounded border border-slate-600 text-slate-100 hover:bg-slate-700">⬇️ GPX</button>
                     <button type="button" data-a="del" data-id="${r.id}" class="text-[11px] px-2 py-1 rounded border border-red-800 text-red-200 hover:bg-red-950">🗑 Elimina</button>
                 </div>`;
             }).join('');
             el.archive.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => archiveAction(b.dataset.a, b.dataset.id)));
+            el.archive.querySelectorAll('[data-lab]').forEach(sel => sel.addEventListener('change', async () => {
+                const rec = await archive.get(sel.dataset.id).catch(() => null);
+                if (!rec || !rec.labels) return;
+                rec.labels[sel.dataset.lab] = sel.dataset.lab === 'saver' ? +sel.value : sel.value;
+                await archive.put(rec); await refreshArchive();
+            }));
+            renderComparison();
+        }
+        // Confronto delle prove: per ogni combinazione batteria × risparmio energetico, quanto l'app è stata sospesa
+        function renderComparison() {
+            if (!el.compare) return;
+            const tests = state.archive.filter(r => r.labels && r.summary && r.summary.classified);
+            if (!tests.length) { el.compare.innerHTML = ''; return; }
+            const rows = [];
+            ['unrestricted', 'optimized'].forEach(bat => [2, 1, 0].forEach(sav => {
+                const list = tests.filter(r => r.labels.battery === bat && +r.labels.saver === sav);
+                const tot = list.reduce((s, r) => s + (r.summary.elapsed || 0), 0);
+                const sus = list.reduce((s, r) => s + (r.summary.suspendedTime || 0), 0), ns = list.reduce((s, r) => s + (r.summary.noSignalTime || 0), 0);
+                const pct = v => tot ? `${(v / tot * 100).toLocaleString('it-IT', { maximumFractionDigits: 1 })}%` : '—';
+                const verdict = !list.length ? '<span class="text-slate-500">da provare</span>' : sus === 0 ? '<span class="text-emerald-300">✅ ok</span>' : sus / tot < 0.02 ? '<span class="text-yellow-300">⚠️ quasi</span>' : '<span class="text-red-300">❌ no</span>';
+                rows.push(`<tr class="border-t border-slate-700/70"><td class="py-1 pr-2">${bat === 'unrestricted' ? 'Senza restrizioni' : 'Ottimizzata'}</td><td class="pr-2">${SAVER_LABELS[sav]}</td>
+                    <td class="pr-2 text-right">${list.length}</td><td class="pr-2 text-right">${list.length ? fmtDuration(tot) : '—'}</td>
+                    <td class="pr-2 text-right text-yellow-300">${pct(sus)}</td><td class="pr-2 text-right text-red-300">${pct(ns)}</td><td>${verdict}</td></tr>`);
+            }));
+            el.compare.innerHTML = `<div class="text-xs uppercase tracking-wide text-slate-400 mb-1">📊 Confronto delle prove (batteria × risparmio energetico)</div>
+                <div class="overflow-x-auto"><table class="w-full text-[11px] text-slate-300"><thead><tr class="text-slate-500 text-left"><th class="font-normal pr-2">Batteria</th><th class="font-normal pr-2">Risparmio</th><th class="font-normal pr-2 text-right">Prove</th><th class="font-normal pr-2 text-right">Durata</th><th class="font-normal pr-2 text-right">App sospesa</th><th class="font-normal pr-2 text-right">Senza segnale</th><th class="font-normal">Esito</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+                <div class="text-[10px] text-slate-500 mt-1">«App sospesa» = il sistema ha fermato l'app (giallo nel grafico); «senza segnale» = app attiva ma GPS senza fix (rosso). Il livello del risparmio è rilevato in automatico quando possibile: correggilo nel percorso se serve.</div>`;
         }
         async function archiveAction(a, id) {
             const rec = await archive.get(id).catch(() => null);
@@ -618,7 +738,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             }
             if (a === 'gpx') { exportGpx(rec); return; }
             if (a === 'open' && !state.tracking) {
-                state.viewing = id; state.raw = rec.points.map(fromArray); state.pauses = rec.pauses || []; state.startedAt = rec.startedAt; state.endedAt = rec.endedAt;
+                state.viewing = id; state.raw = rec.points.map(fromArray); state.pauses = rec.pauses || []; state.beats = rec.beats || []; state.startedAt = rec.startedAt; state.endedAt = rec.endedAt;
                 state.background = rec.background; state.trackSettings = normalizeSettings(rec.settings);
                 state.drawnCount = -1;
                 renderArchive(); render();
@@ -645,7 +765,8 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                     if (r.found) {
                         const t = parseRecovered(r.lines);
                         if (t.points.length) {
-                            await saveToArchive({ startedAt: t.startedAt, endedAt: t.points[t.points.length - 1][0], background: t.background, settings: t.settings, raw: t.points.map(fromArray), pauses: t.pauses }, ' (recuperato)');
+                            const lastT = Math.max(t.points[t.points.length - 1][0], t.beats.length ? t.beats[t.beats.length - 1][0] : 0);
+                            await saveToArchive({ startedAt: t.startedAt, endedAt: lastT, background: t.background, settings: t.settings, raw: t.points.map(fromArray), pauses: t.pauses, beats: t.beats }, ' (recuperato)');
                             say('⚠️ Il sistema aveva chiuso l\'app durante un percorso: i punti registrati fino a quel momento sono stati recuperati nell\'archivio.', 8000);
                         }
                         await plugin.discardRecovered();
@@ -700,7 +821,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             const lastT = state.raw.length ? state.raw[state.raw.length - 1].t : 0;
             const now = Math.max(lastT, state.tracking ? Date.now() : (state.endedAt || lastT));
             const proc = currentProc();
-            const st = stats(proc, { startedAt: state.startedAt, now, live: state.tracking && !state.paused });
+            const st = stats(proc, { startedAt: state.startedAt, now, live: state.tracking && !state.paused, beats: state.beats });
             const cell = (k, v, sub) => `<div class="bg-slate-900/60 border border-slate-700 rounded-lg p-2"><div class="text-[10px] uppercase tracking-wide text-slate-400">${k}</div><div class="text-lg font-bold text-white leading-tight">${v}</div>${sub ? `<div class="text-[10px] text-slate-500">${sub}</div>` : ''}</div>`;
             const eleSrc = { gps: 'dal GPS', baro: 'dal barometro', combined: 'barometro + GPS' }[st.elevationSource];
             el.stats.innerHTML = has ? [
@@ -717,9 +838,12 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             el.filterNote.textContent = has && (rjTot || proc.autoPauses.length)
                 ? `Filtri: ${[rj.warmup && `${rj.warmup} in attesa di precisione`, rj.accuracy && `${rj.accuracy} poco precisi`, rj.interval && `${rj.interval} per intervallo`, rj.distance && `${rj.distance} per distanza minima`, rj.jump && `${rj.jump} salti impossibili`, rj.speedAcc && `${rj.speedAcc} velocità incerte`].filter(Boolean).join(', ') || 'nessun punto scartato'}${proc.autoPauses.length ? ` · pausa automatica ${fmtDuration(st.autoPauseTime)}` : ''}. I dati grezzi restano salvati: cambiando le impostazioni il calcolo si aggiorna.`
                 : '';
-            el.gapNote.textContent = st.gapTime > 0
-                ? `⚠️ ${fmtDuration(st.gapTime)} senza GPS (${st.gaps.length} ${st.gaps.length === 1 ? 'interruzione' : 'interruzioni'}, app chiusa o sospesa dal sistema): nel grafico vale velocità zero e abbassa la media.`
-                : '';
+            const ns = st.noSignalSats;
+            el.gapNote.innerHTML = st.gapTime <= 0 ? '' : st.classified
+                ? [st.suspendedTime > 0 && `<span class="text-yellow-300">🟨 App sospesa dal sistema per ${fmtDuration(st.suspendedTime)} (${st.suspended.length} ${st.suspended.length === 1 ? 'volta' : 'volte'}): il GPS era fermo perché Android ha fermato l'app.</span>`,
+                   st.noSignalTime > 0 && `<span class="text-red-300">🟥 GPS senza segnale per ${fmtDuration(st.noSignalTime)} con l'app attiva${ns ? (ns.gpsOff ? ' (GPS spento nelle impostazioni)' : ` (in media ${ns.used} satelliti usati su ${ns.visible} visibili)`) : ''}.</span>`,
+                   '<span class="text-slate-400">Nel grafico questi periodi valgono velocità zero e abbassano la media.</span>'].filter(Boolean).join('<br>')
+                : `<span class="text-red-300">⚠️ ${fmtDuration(st.gapTime)} senza GPS (${st.gaps.length} ${st.gaps.length === 1 ? 'interruzione' : 'interruzioni'}). Percorso registrato prima della 2.2: non si può distinguere tra app sospesa e mancanza di segnale.</span>`;
             const viewingRec = state.viewing && state.archive.find(r => r.id === state.viewing);
             el.trackInfo.textContent = state.tracking ? `${state.paused ? 'In pausa' : 'Registrazione in corso'} · ${state.raw.length} punti grezzi` : (viewingRec ? `Visualizzi: ${viewingRec.name}` : '');
             el.chartBox.classList.toggle('hidden', !has);
@@ -747,7 +871,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             });
             if (el.chartLegend) el.chartLegend.innerHTML = [
                 showV && '<span class="text-sky-400">━</span> velocità', showV && '<span class="text-amber-400">┅</span> media',
-                showA && '<span class="text-emerald-400">━</span> altitudine', '<span class="text-red-400">■</span> senza GPS', '<span class="text-slate-400">■</span> pausa'].filter(Boolean).join(' · ');
+                showA && '<span class="text-emerald-400">━</span> altitudine', '<span class="text-yellow-300">■</span> app sospesa', '<span class="text-red-400">■</span> senza segnale', '<span class="text-slate-400">■</span> pausa'].filter(Boolean).join(' · ');
             const dpr = Math.min(window.devicePixelRatio || 1, 3);
             if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
             const ctx = c.getContext('2d');
@@ -782,7 +906,10 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             const band = (a, b, color) => { ctx.fillStyle = color; ctx.fillRect(X(a), T, Math.max(1, X(b) - X(a)), h - T - B); };
             proc.pauses.forEach(([a, b]) => band(a, b || now, 'rgba(148,163,184,0.22)'));
             proc.autoPauses.forEach(([a, b]) => band(a, b, 'rgba(148,163,184,0.10)'));
-            st.gaps.forEach(g => band(g.from, g.to, 'rgba(239,68,68,0.16)'));
+            if (st.classified) {
+                st.noSignal.forEach(g => band(g.from, g.to, 'rgba(239,68,68,0.18)'));
+                st.suspended.forEach(g => band(g.from, g.to, 'rgba(250,204,21,0.24)'));
+            } else st.gaps.forEach(g => band(g.from, g.to, 'rgba(239,68,68,0.16)'));
             // altitudine (area tenue + linea), interrotta nei buchi
             if (showA && eles.length) {
                 const segs = [];

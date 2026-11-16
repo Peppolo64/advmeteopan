@@ -23,6 +23,10 @@ final class TrackStore {
 
     private static final List<double[]> points = new ArrayList<>();
     private static final List<long[]> pauses = new ArrayList<>();   // [inizio, fine (0 = in corso)]
+    // Battiti ogni 5 s, indipendenti dal GPS: [ora, elapsedRealtime, uptimeMillis, satelliti visti, usati,
+    // GPS acceso, schermo acceso, batteria senza restrizioni, livello risparmio energetico]
+    static final int HB_FIELDS = 9;
+    private static final List<long[]> beats = new ArrayList<>();
     private static boolean active = false, background = false, paused = false;
     private static long startedAt = 0;
     private static String settingsJson = "{}";
@@ -36,6 +40,7 @@ final class TrackStore {
     static synchronized void begin(boolean inBackground, String settings) {
         points.clear();
         pauses.clear();
+        beats.clear();
         active = true; paused = false;
         background = inBackground;
         startedAt = System.currentTimeMillis();
@@ -91,6 +96,19 @@ final class TrackStore {
             l = listener;
         }
         if (l != null) l.onPoint(p);
+    }
+
+    static synchronized void beat(long[] b) {
+        if (!active || paused) return;
+        beats.add(b);
+        StringBuilder sb = new StringBuilder("H");
+        for (long v : b) sb.append(',').append(v);
+        write(sb.toString(), true);
+    }
+
+    static synchronized List<long[]> beatsFrom(int index) {
+        int i = Math.max(0, Math.min(index, beats.size()));
+        return new ArrayList<>(beats.subList(i, beats.size()));
     }
 
     static synchronized double[] last() { return points.isEmpty() ? null : points.get(points.size() - 1); }

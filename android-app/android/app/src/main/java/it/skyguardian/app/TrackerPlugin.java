@@ -67,11 +67,12 @@ public class TrackerPlugin extends Plugin {
     private JSObject power() {
         Context ctx = getContext();
         PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
-        ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
         JSObject r = new JSObject();
-        r.put("ignoringBatteryOptimizations", Build.VERSION.SDK_INT < 23 || pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
-        r.put("backgroundRestricted", Build.VERSION.SDK_INT >= 28 && am.isBackgroundRestricted());   // Samsung: «Consenti attività in background» spento
+        r.put("ignoringBatteryOptimizations", PowerInfo.ignoringBatteryOptimizations(ctx));
+        r.put("backgroundRestricted", PowerInfo.backgroundRestricted(ctx));   // Samsung: «Consenti attività in background» spento
         r.put("powerSaveMode", pm.isPowerSaveMode());
+        r.put("saverLevel", PowerInfo.saverLevel(ctx));                          // 0 spento, 1 standard, 2 massimo (se riconosciuto)
+        r.put("saverMaxKey", PowerInfo.maxKey(ctx));
         r.put("manufacturer", Build.MANUFACTURER);
         r.put("model", Build.MODEL);
         r.put("sdk", Build.VERSION.SDK_INT);
@@ -197,6 +198,7 @@ public class TrackerPlugin extends Plugin {
         } else {
             foregroundOptions = TrackingService.optionsFrom(json);
             foregroundRecorder = new TrackRecorder(getContext(), TrackStore::add);
+            foregroundRecorder.setBeatSink(TrackStore::beat);
             ok = foregroundRecorder.start(foregroundOptions);
         }
         if (!ok) {
@@ -249,12 +251,21 @@ public class TrackerPlugin extends Plugin {
         List<double[]> list = TrackStore.from(from);
         JSArray arr = new JSArray();
         for (double[] p : list) arr.put(pointArray(p));
+        int beatsFrom = call.getInt("beatsFrom", 0);
+        JSArray beats = new JSArray();
+        for (long[] b : TrackStore.beatsFrom(beatsFrom)) {
+            JSONArray row = new JSONArray();
+            for (long v : b) row.put(v);
+            beats.put(row);
+        }
         JSArray pauses = new JSArray();
         for (long[] p : TrackStore.pauses()) pauses.put(new JSONArray().put(p[0]).put(p[1]));
         JSObject r = new JSObject();
         r.put("from", from);
         r.put("points", arr);
         r.put("pauses", pauses);
+        r.put("beats", beats);
+        r.put("beatsFrom", beatsFrom);
         r.put("total", TrackStore.size());
         r.put("active", TrackStore.isActive());
         r.put("paused", TrackStore.isPaused());

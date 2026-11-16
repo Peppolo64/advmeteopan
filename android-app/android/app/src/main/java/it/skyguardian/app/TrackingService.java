@@ -70,7 +70,7 @@ public class TrackingService extends Service {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
         else startForeground(NOTIFICATION_ID, n);
         options = optionsFrom(TrackStore.settings());
-        if (recorder == null) recorder = new TrackRecorder(this, TrackStore::add);
+        if (recorder == null) { recorder = new TrackRecorder(this, TrackStore::add); recorder.setBeatSink(TrackStore::beat); }
         if (!recorder.start(options)) {
             TrackStore.end();
             TrackerPlugin.notifyEvent("stopped", "gps");

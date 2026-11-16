@@ -26,6 +26,8 @@ import java.util.concurrent.Executors;
  */
 final class TrackRecorder implements SensorEventListener {
     interface FixSink { void onFix(double[] p); }
+    interface BeatSink { void onBeat(long[] b); }
+    private static final long BEAT_MS = 5000;
 
     static final class Options {
         long intervalMs = 1000;
@@ -42,7 +44,24 @@ final class TrackRecorder implements SensorEventListener {
     private LocationListener listener;
     private Object gnssStatusCallback, gnssMeasurementsCallback, altitudeConverter;
     private volatile float lastPressure = Float.NaN;
-    private volatile int satsUsed = -1, satsL5 = -1;
+    private volatile int satsUsed = -1, satsL5 = -1, satsVisible = -1;
+    private BeatSink beatSink;
+    private final Handler beatHandler = new Handler(Looper.getMainLooper());
+    private final Runnable beatTask = new Runnable() {
+        @Override public void run() {
+            if (!running || beatSink == null) return;
+            boolean gpsOn = false;
+            try { gpsOn = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER); } catch (Exception ignored) { }
+            beatSink.onBeat(new long[] {
+                System.currentTimeMillis(), android.os.SystemClock.elapsedRealtime(), android.os.SystemClock.uptimeMillis(),
+                satsVisible, satsUsed, gpsOn ? 1 : 0, PowerInfo.screenOn(context) ? 1 : 0,
+                PowerInfo.ignoringBatteryOptimizations(context) ? 1 : 0, PowerInfo.saverLevel(context) });
+            beatHandler.postDelayed(this, BEAT_MS);
+        }
+    };
+
+    /** Battiti indipendenti dal GPS: servono a distinguere «app sospesa» da «GPS senza segnale». */
+    void setBeatSink(BeatSink s) { beatSink = s; }
     private volatile boolean running = false;
     private volatile boolean fullGnssActive = false;
 
@@ -77,11 +96,14 @@ final class TrackRecorder implements SensorEventListener {
         if (o.fullGnss && Build.VERSION.SDK_INT >= 31) registerFullTracking();
         if (pressureSensor != null) sensorManager.registerListener(this, pressureSensor, SensorManager.SENSOR_DELAY_NORMAL);
         running = true;
+        beatHandler.removeCallbacks(beatTask);
+        if (beatSink != null) beatHandler.post(beatTask);
         return true;
     }
 
     void stop() {
         running = false;
+        beatHandler.removeCallbacks(beatTask);
         if (listener != null) {
             try { locationManager.removeUpdates(listener); } catch (Exception ignored) { }
             listener = null;
@@ -117,7 +139,7 @@ final class TrackRecorder implements SensorEventListener {
                         if (f > 1.15e9f && f < 1.20e9f) l5++;
                     }
                 }
-                satsUsed = used; satsL5 = l5;
+                satsUsed = used; satsL5 = l5; satsVisible = status.getSatelliteCount();
             }
         };
         try {

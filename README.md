@@ -49,6 +49,10 @@ Pannello in fondo (`tracker.js`, plugin Android `TrackerPlugin` + servizio `Trac
 
 **Esegui in background** (switch, solo app): servizio in primo piano con notifica «SkyGuardian sta registrando» e tasti Pausa/Riprendi e Ferma, wake lock parziale durante la registrazione, richiesta di esenzione dall'ottimizzazione batteria e controllo delle impostazioni del telefono (su Samsung: Batteria «Senza restrizioni» e «Consenti attività in background»). I punti sono scritti su file man mano: se il sistema chiude l'app, il percorso si recupera alla riapertura. Senza background il GPS si ferma con l'app: quei periodi valgono velocità zero e abbassano la media. Il workflow ammette solo questo servizio e i relativi permessi; continua a bloccare receiver, avvio automatico e posizione in background.
 
+### App sospesa o GPS senza segnale?
+
+Durante la registrazione l'app scrive un battito ogni 5 s, indipendente dal GPS, con due orologi di Android (`elapsedRealtime`, che avanza anche nel sonno, e `uptimeMillis`, che si ferma), i satelliti visti/usati e lo stato energetico (batteria senza restrizioni, risparmio energetico spento/Standard/Massimo, schermo). Un buco nei punti GPS con i battiti presenti è **senza segnale** (rosso nel grafico, con i satelliti usati); un buco senza battiti o con il processore addormentato è **app sospesa** (giallo). Nell'archivio ogni percorso mostra le condizioni (correggibili) e la tabella «Confronto delle prove» riassume le 6 combinazioni batteria × risparmio energetico. Il livello «Massimo» di Samsung non ha un'API pubblica: è rilevato dalle impostazioni interne quando possibile.
+
 ## Versione
 
 Unica fonte: `version.js` (`window.SKY_VERSION = 'MAGGIORE.MINORE.CORREZIONE'`). Il workflow aggiunge il numero di build: l'APK si chiama `SkyGuardian-v2.0.0-build25.apk` (`versionName` «2.0.0 (build 25)», `versionCode` crescente) e la versione è visibile in fondo al Pannello di Controllo.
