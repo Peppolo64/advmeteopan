@@ -73,6 +73,7 @@ public class TrackerPlugin extends Plugin {
         r.put("powerSaveMode", pm.isPowerSaveMode());
         r.put("saverLevel", PowerInfo.saverLevel(ctx));                          // 0 spento, 1 standard, 2 massimo (se riconosciuto)
         r.put("saverMaxKey", PowerInfo.maxKey(ctx));
+        r.put("locationPowerSaveMode", PowerInfo.locationPowerSaveMode(ctx));
         r.put("manufacturer", Build.MANUFACTURER);
         r.put("model", Build.MODEL);
         r.put("sdk", Build.VERSION.SDK_INT);

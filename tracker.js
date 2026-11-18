@@ -148,7 +148,49 @@
     // schermo acceso, batteria senza restrizioni, livello risparmio (0 spento, 1 standard, 2 massimo)].
     // elapsedRealtime avanza anche quando il processore dorme, uptimeMillis no: la differenza è il sonno.
     const BEAT_MS = 5000;
-    const fromBeat = a => ({ t: +a[0], el: +a[1], up: +a[2], vis: +a[3], used: +a[4], gps: +a[5], screen: +a[6], unr: +a[7], saver: +a[8] });
+    // Dalla 2.3 il battito ha anche: età dell'ultimo aggiornamento dei satelliti, età dell'ultimo fix, motore GNSS
+    // acceso (1) / fermato (0), limiti GPS del risparmio energetico. Nei battiti della 2.2 questi campi mancano.
+    const num2 = v => (v === undefined || v === null || Number.isNaN(+v)) ? NaN : +v;
+    const fromBeat = a => ({ t: +a[0], el: +a[1], up: +a[2], vis: +a[3], used: +a[4], gps: +a[5], screen: +a[6], unr: +a[7], saver: +a[8],
+                             gnssAge: num2(a[9]), fixAge: num2(a[10]), gnssRun: num2(a[11]), locMode: num2(a[12]) });
+    const SYSTEM_CAUSES = ['frozen', 'gpsoff', 'blocked', 'held'];
+    const CAUSE_LABELS = { frozen: 'app congelata dal sistema', gpsoff: 'posizione disattivata', blocked: 'GPS fermato dal sistema (app attiva)',
+                           held: 'posizioni trattenute dal sistema (satelliti agganciati)', nosignal: 'senza segnale', weak: 'segnale debole (fix troppo imprecisi)', unknown: 'non determinabile (dati della 2.2)' };
+    // Causa di ogni intervallo tra due battiti, osservata DURANTE l'intervallo (battito finale).
+    function causeIntervals(beats, opts) {
+        opts = opts || {};
+        if (!beats || !beats.length) return null;
+        const out = [];
+        const add = (a, b, c) => {
+            if (b - a < 500) return;
+            const last = out[out.length - 1];
+            if (last && last[2] === c && a - last[1] < 1500) last[1] = Math.max(last[1], b); else out.push([a, b, c]);
+        };
+        const ivl = opts.intervalMs || 1000;
+        if (opts.startedAt && beats[0].t - opts.startedAt > 2.5 * BEAT_MS) add(opts.startedAt + BEAT_MS, beats[0].t, 'frozen');
+        for (let i = 1; i < beats.length; i++) {
+            const a = beats[i - 1], b = beats[i], dWall = b.t - a.t;
+            if (dWall > 2.5 * BEAT_MS) { add(a.t, a.t + BEAT_MS, causeOf(b, BEAT_MS, ivl)); add(a.t + BEAT_MS, b.t, 'frozen'); continue; }
+            const sleep = (b.el - a.el) - (b.up - a.up);
+            add(a.t, b.t, sleep > 0.5 * dWall ? 'frozen' : causeOf(b, dWall, ivl));
+        }
+        const last = beats[beats.length - 1];
+        if (opts.end && opts.end - last.t > 2.5 * BEAT_MS) add(last.t + BEAT_MS, opts.end, 'frozen');
+        const cuts = (opts.pauses || []).map(([a, b]) => [a, b || opts.end || Infinity]);
+        return out.flatMap(([a, b, c]) => subtractIntervals([[a, b]], cuts).map(([x, y]) => [x, y, c]));
+    }
+    // dWall = durata dell'intervallo, ivl = intervallo GPS richiesto (ms)
+    function causeOf(b, dWall, ivl) {
+        dWall = dWall || BEAT_MS; ivl = ivl || 1000;
+        if (b.gps === 0) return 'gpsoff';
+        if (!Number.isFinite(b.gnssAge)) return 'unknown';                              // battito della 2.2
+        // un fix è arrivato durante l'intervallo: il GPS funziona, i punti sono scartati dai filtri (precisione)
+        if (Number.isFinite(b.fixAge) && b.fixAge >= 0 && b.fixAge < Math.max(dWall, ivl + 1000)) return 'weak';
+        // il motore GNSS è fermo, o i satelliti non si aggiornano più (di norma ogni secondo)
+        if (b.gnssRun === 0 || b.gnssAge < 0 || b.gnssAge > Math.max(7000, 2.5 * ivl)) return 'blocked';
+        if (b.used >= 4) return 'held';                                                  // satelliti agganciati ma nessun fix consegnato
+        return 'nosignal';
+    }
     function subtractIntervals(list, cuts) {
         let out = list.map(x => x.slice());
         cuts.forEach(([c0, c1]) => {
@@ -167,28 +209,16 @@
         a.forEach(([a0, a1]) => b.forEach(([b0, b1]) => { const lo = Math.max(a0, b0), hi = Math.min(a1, b1); if (hi - lo >= 1000) out.push([lo, hi]); }));
         return out;
     }
-    // Periodi in cui l'app era sospesa: battiti mancanti (app congelata o processore spento) o sonno rilevato dai due orologi.
-    // null se il percorso non ha battiti (registrazioni precedenti): i buchi non sono classificabili.
+    // Periodi interrotti dal sistema (qualsiasi causa gialla), uniti. null se il percorso non ha battiti.
     function suspendedIntervals(beats, opts) {
-        opts = opts || {};
-        if (!beats || !beats.length) return null;
+        const c = causeIntervals(beats, opts);
+        if (!c) return null;
         const out = [];
-        const add = (a, b) => {
-            if (b - a < 1000) return;
+        c.filter(x => SYSTEM_CAUSES.includes(x[2])).forEach(([x, y]) => {
             const last = out[out.length - 1];
-            if (last && a - last[1] < 1500) last[1] = Math.max(last[1], b); else out.push([a, b]);
-        };
-        if (opts.startedAt && beats[0].t - opts.startedAt > 2.5 * BEAT_MS) add(opts.startedAt + BEAT_MS, beats[0].t);
-        for (let i = 1; i < beats.length; i++) {
-            const a = beats[i - 1], b = beats[i], dWall = b.t - a.t;
-            const sleep = (b.el - a.el) - (b.up - a.up);
-            if (dWall > 2.5 * BEAT_MS) add(a.t + BEAT_MS, b.t);
-            else if (sleep > 0.5 * dWall) add(a.t, b.t);
-        }
-        const last = beats[beats.length - 1];
-        if (opts.end && opts.end - last.t > 2.5 * BEAT_MS) add(last.t + BEAT_MS, opts.end);
-        // durante le pause manuali i battiti sono fermi per scelta: non è sospensione
-        return subtractIntervals(out, (opts.pauses || []).map(([a, b]) => [a, b || opts.end || Infinity]));
+            if (last && x - last[1] < 1500) last[1] = Math.max(last[1], y); else out.push([x, y]);
+        });
+        return out.filter(([x, y]) => y - x >= 1000);
     }
     // Condizioni energetiche prevalenti durante la registrazione
     function conditionsOf(beats) {
@@ -218,13 +248,30 @@
             proc.pauses.forEach(([pa, pb]) => { free -= Math.max(0, Math.min(b, pb || end) - Math.max(a, pa)); });
             if (free > proc.gapMs) { out.gaps.push({ from: a, to: b }); out.gapTime += free; }
         });
-        // classificazione dei buchi: app sospesa (giallo) o GPS senza segnale con app attiva (rosso)
+        // classificazione dei buchi: interrotto dal sistema (giallo) o senza segnale con GPS attivo (rosso)
         const beats = (opts.beats || []).map(b => Array.isArray(b) ? fromBeat(b) : b);
-        const susp = suspendedIntervals(beats, { startedAt, end, pauses: proc.pauses });
-        out.classified = !!susp;
+        const causes = causeIntervals(beats, { startedAt, end, pauses: proc.pauses, intervalMs: S.intervalS * 1000 });
+        out.classified = !!causes;
+        out.legacy = !!causes && beats.some(b => !Number.isFinite(b.gnssAge));
         const holeList = subtractIntervals(out.gaps.map(g => [g.from, g.to]), proc.pauses.map(([a, b]) => [a, b || end]));
-        out.suspended = susp ? intersectIntervals(holeList, susp).map(([from, to]) => ({ from, to })) : [];
-        out.noSignal = susp ? subtractIntervals(holeList, susp).filter(([a, b]) => b - a > 3000).map(([from, to]) => ({ from, to })) : [];
+        out.causeTime = {};
+        out.suspended = []; out.noSignal = [];
+        if (causes) {
+            const inHoles = [];
+            holeList.forEach(([h0, h1]) => {
+                const parts = causes.flatMap(([a, b, c]) => intersectIntervals([[h0, h1]], [[a, b]]).map(([x, y]) => ({ from: x, to: y, cause: c })));
+                // l'ultimo tratto del buco contiene il fix che lo chiude: non è «fix imprecisi», vale la causa precedente
+                const last = parts[parts.length - 1];
+                if (parts.length > 1 && last.cause === 'weak' && h1 - last.to < 1500) last.cause = parts[parts.length - 2].cause;
+                inHoles.push(...parts);
+            });
+            inHoles.forEach(g => { out.causeTime[g.cause] = (out.causeTime[g.cause] || 0) + g.to - g.from; });
+            out.suspended = inHoles.filter(g => SYSTEM_CAUSES.includes(g.cause));
+            const covered = inHoles.map(g => [g.from, g.to]);
+            // parti dei buchi non coperte da battiti: senza informazioni, si considerano senza segnale
+            const rest = subtractIntervals(holeList, covered).filter(([a, b]) => b - a > 3000).map(([from, to]) => ({ from, to, cause: 'nosignal' }));
+            out.noSignal = inHoles.filter(g => !SYSTEM_CAUSES.includes(g.cause)).concat(rest).filter(g => g.to - g.from > 1000);
+        }
         out.suspendedTime = out.suspended.reduce((s, g) => s + g.to - g.from, 0);
         out.noSignalTime = out.noSignal.reduce((s, g) => s + g.to - g.from, 0);
         if (out.noSignal.length) {
@@ -359,7 +406,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
     }
 
     const SAVER_LABELS = ['spento', 'Standard', 'Massimo'];
-    const calc = { GAP_MS, BEAT_MS, SAVER_LABELS, fromBeat, subtractIntervals, intersectIntervals, suspendedIntervals, conditionsOf, DEFAULTS, PROFILES, terrariumElevation, contourInterval, contourSegments, settingsFor, normalizeSettings, distanceM, fromArray, toArray, speedSigma, gpsAltitude,
+    const calc = { GAP_MS, BEAT_MS, SAVER_LABELS, SYSTEM_CAUSES, CAUSE_LABELS, causeIntervals, causeOf, fromBeat, subtractIntervals, intersectIntervals, suspendedIntervals, conditionsOf, DEFAULTS, PROFILES, terrariumElevation, contourInterval, contourSegments, settingsFor, normalizeSettings, distanceM, fromArray, toArray, speedSigma, gpsAltitude,
                    process, stats, speedSeries, toGpx, parseRecovered, fmtDuration, fmtPace, kmh };
 
     // =====================================================================
@@ -442,6 +489,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                 ${row(!P.backgroundRestricted, samsung ? '«Consenti attività in background» nella scheda dell\'app (Batteria: <b>Senza restrizioni</b>)' : 'Attività in background consentita', btn('settings', 'Apri impostazioni'))}
                 ${row(P.notifications, 'Notifiche (per vedere «SkyGuardian sta registrando» con Pausa e Ferma)', btn('settings', 'Apri impostazioni'))}
                 <div class="flex items-start gap-2"><span>🔋</span><div class="flex-1">Risparmio energetico ${P.saverLevel === 2 ? '<b>attivo (MASSIMO)</b>' : P.powerSaveMode ? '<b>attivo (STANDARD)</b>' : '<b>non attivo</b>'}${samsung ? '. Con il risparmio Standard o Massimo SkyGuardian deve essere tra le app consentite e la sua batteria «Senza restrizioni»' : ''}. Il servizio con notifica e il processore sveglio continuano a registrare.</div>${btn('saver', 'Modifica')}</div>
+                ${P.powerSaveMode && P.locationPowerSaveMode > 0 ? `<div class="flex items-start gap-2"><span>${[1, 2, 4].includes(P.locationPowerSaveMode) ? '⚠️' : '🛰️'}</span><div class="flex-1">Limite del GPS imposto dal risparmio energetico: <b>${({ 1: 'GPS spento a schermo spento', 2: 'posizione spenta a schermo spento', 3: 'posizione solo per l\'app in primo piano', 4: 'richieste di posizione rallentate a schermo spento' })[P.locationPowerSaveMode] || 'modalità ' + P.locationPowerSaveMode}</b>. ${[1, 2, 4].includes(P.locationPowerSaveMode) ? 'Con lo schermo spento la registrazione verrà quasi certamente interrotta (giallo nel grafico).' : 'Il servizio di registrazione con notifica conta come app in primo piano.'}</div></div>` : ''}
                 ${P.fullGnssSupported ? '' : '<div class="text-[11px] text-slate-500">Tracciamento GNSS completo non disponibile (serve Android 12+).</div>'}
             </div>`;
             el.power.querySelectorAll('[data-pw]').forEach(b => b.addEventListener('click', async () => {
@@ -656,8 +704,8 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
         function summaryOf(rec) {
             const proc = process(rec.raw, { settings: rec.settings, pauses: rec.pauses, geoidN: state.geoidN });
             const st = stats(proc, { startedAt: rec.startedAt, now: rec.endedAt, beats: rec.beats });
-            return { distance: st.distance, elapsed: st.elapsed, avg: st.avg, points: proc.points.length, classified: st.classified,
-                     suspendedTime: st.suspendedTime, noSignalTime: st.noSignalTime, gapTime: st.gapTime, conditions: st.conditions };
+            return { v: 3, distance: st.distance, elapsed: st.elapsed, avg: st.avg, points: proc.points.length, classified: st.classified, legacy: st.legacy,
+                     suspendedTime: st.suspendedTime, noSignalTime: st.noSignalTime, gapTime: st.gapTime, causeTime: st.causeTime, conditions: st.conditions };
         }
         async function saveToArchive(t, nameSuffix) {
             if (!t.raw.length) { say('Percorso senza punti: non salvato.', 4000); return null; }
@@ -674,6 +722,17 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
         }
         async function refreshArchive() {
             try { state.archive = await archive.list(); } catch (e) { state.archive = []; }
+            // riepiloghi calcolati con una versione precedente: si ricalcolano dai dati grezzi
+            const old = state.archive.filter(r => !r.summary || r.summary.v !== 3);
+            for (const r of old) {
+                try {
+                    const rec = await archive.get(r.id);
+                    if (!rec || !rec.points) continue;
+                    rec.summary = summaryOf({ raw: rec.points.map(fromArray), settings: rec.settings, pauses: rec.pauses || [], startedAt: rec.startedAt, endedAt: rec.endedAt, beats: rec.beats });
+                    await archive.put(rec);
+                } catch (e) { /* ignora */ }
+            }
+            if (old.length) { try { state.archive = await archive.list(); } catch (e) { /* ignora */ } }
             renderArchive();
         }
         function renderArchive() {
@@ -688,7 +747,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                             <option value="optimized" ${lb.battery === 'optimized' ? 'selected' : ''}>🔋 Ottimizzata</option></select>
                         <select data-lab="saver" data-id="${r.id}" class="px-1 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-200">
                             ${SAVER_LABELS.map((l, i) => `<option value="${i}" ${+lb.saver === i ? 'selected' : ''}>⚡ Risparmio ${l}</option>`).join('')}</select>
-                        ${s.classified ? `<span class="${s.suspendedTime > 0 ? 'text-yellow-300' : 'text-emerald-300'}">app sospesa ${fmtDuration(s.suspendedTime)}</span> · <span class="${s.noSignalTime > 0 ? 'text-red-300' : 'text-slate-400'}">senza segnale ${fmtDuration(s.noSignalTime)}</span>` : ''}
+                        ${s.classified ? `<span class="${s.suspendedTime > 0 ? 'text-yellow-300' : 'text-emerald-300'}">fermato dal sistema ${fmtDuration(s.suspendedTime)}</span> · <span class="${s.noSignalTime > 0 ? 'text-red-300' : 'text-slate-400'}">senza segnale ${fmtDuration(s.noSignalTime)}</span>${s.legacy ? ' · <span class="text-slate-500">dati 2.2: classificazione incompleta</span>' : ''}` : ''}
                     </div>` : (s.gapTime ? `<div class="text-[11px] text-slate-500 mt-1">registrato prima della 2.2: buchi (${fmtDuration(s.gapTime)}) non classificabili</div>` : '');
                 return `<div class="flex flex-wrap items-center gap-2 p-2 rounded-lg border ${on ? 'border-blue-500 bg-blue-950/30' : 'border-slate-700 bg-slate-900/40'}">
                     <div class="flex-1 min-w-[10rem]"><div class="text-sm text-white">${esc(r.name)}</div>
@@ -718,14 +777,23 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                 const tot = list.reduce((s, r) => s + (r.summary.elapsed || 0), 0);
                 const sus = list.reduce((s, r) => s + (r.summary.suspendedTime || 0), 0), ns = list.reduce((s, r) => s + (r.summary.noSignalTime || 0), 0);
                 const pct = v => tot ? `${(v / tot * 100).toLocaleString('it-IT', { maximumFractionDigits: 1 })}%` : '—';
-                const verdict = !list.length ? '<span class="text-slate-500">da provare</span>' : sus === 0 ? '<span class="text-emerald-300">✅ ok</span>' : sus / tot < 0.02 ? '<span class="text-yellow-300">⚠️ quasi</span>' : '<span class="text-red-300">❌ no</span>';
+                const reliable = list.filter(r => !r.summary.legacy);
+                const rTot = reliable.reduce((s, r) => s + (r.summary.elapsed || 0), 0), rSus = reliable.reduce((s, r) => s + (r.summary.suspendedTime || 0), 0);
+                const verdict = !list.length ? '<span class="text-slate-500">da provare</span>'
+                    : !reliable.length ? '<span class="text-slate-400">🔁 da ripetere (dati 2.2)</span>'
+                    : rSus === 0 ? '<span class="text-emerald-300">✅ nessuna interruzione</span>'
+                    : rSus / rTot < 0.01 ? '<span class="text-yellow-300">⚠️ interruzioni brevi</span>'
+                    : '<span class="text-red-300">❌ interrotta dal sistema</span>';
                 rows.push(`<tr class="border-t border-slate-700/70"><td class="py-1 pr-2">${bat === 'unrestricted' ? 'Senza restrizioni' : 'Ottimizzata'}</td><td class="pr-2">${SAVER_LABELS[sav]}</td>
                     <td class="pr-2 text-right">${list.length}</td><td class="pr-2 text-right">${list.length ? fmtDuration(tot) : '—'}</td>
                     <td class="pr-2 text-right text-yellow-300">${pct(sus)}</td><td class="pr-2 text-right text-red-300">${pct(ns)}</td><td>${verdict}</td></tr>`);
             }));
             el.compare.innerHTML = `<div class="text-xs uppercase tracking-wide text-slate-400 mb-1">📊 Confronto delle prove (batteria × risparmio energetico)</div>
-                <div class="overflow-x-auto"><table class="w-full text-[11px] text-slate-300"><thead><tr class="text-slate-500 text-left"><th class="font-normal pr-2">Batteria</th><th class="font-normal pr-2">Risparmio</th><th class="font-normal pr-2 text-right">Prove</th><th class="font-normal pr-2 text-right">Durata</th><th class="font-normal pr-2 text-right">App sospesa</th><th class="font-normal pr-2 text-right">Senza segnale</th><th class="font-normal">Esito</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
-                <div class="text-[10px] text-slate-500 mt-1">«App sospesa» = il sistema ha fermato l'app (giallo nel grafico); «senza segnale» = app attiva ma GPS senza fix (rosso). Il livello del risparmio è rilevato in automatico quando possibile: correggilo nel percorso se serve.</div>`;
+                <div class="overflow-x-auto"><table class="w-full text-[11px] text-slate-300"><thead><tr class="text-slate-500 text-left"><th class="font-normal pr-2">Batteria</th><th class="font-normal pr-2">Risparmio</th><th class="font-normal pr-2 text-right">Prove</th><th class="font-normal pr-2 text-right">Durata</th><th class="font-normal pr-2 text-right">Fermato dal sistema</th><th class="font-normal pr-2 text-right">Senza segnale</th><th class="font-normal">Esito</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+                <div class="text-[10px] text-slate-500 mt-1 space-y-0.5">
+                    <div><b>Criterio dell'esito</b> (solo «Fermato dal sistema», sulle prove registrate dalla 2.3): ✅ zero secondi fermati dal sistema · ⚠️ meno dell'1% della durata · ❌ 1% o più. «Senza segnale» non conta: dipende dal luogo, non dal risparmio energetico.</div>
+                    <div>«Fermato dal sistema» (giallo) = app congelata, GPS fermato o posizioni trattenute da Android con l'app attiva, posizione disattivata. «Senza segnale» (rosso) = GPS acceso e attivo ma senza satelliti sufficienti o con fix troppo imprecisi.</div>
+                    <div>Le prove della 2.2 non registravano lo stato del GPS: lì un GPS fermato dal sistema appariva come «senza segnale». Ripetile per un esito affidabile.</div></div>`;
         }
         async function archiveAction(a, id) {
             const rec = await archive.get(id).catch(() => null);
@@ -840,8 +908,9 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
                 : '';
             const ns = st.noSignalSats;
             el.gapNote.innerHTML = st.gapTime <= 0 ? '' : st.classified
-                ? [st.suspendedTime > 0 && `<span class="text-yellow-300">🟨 App sospesa dal sistema per ${fmtDuration(st.suspendedTime)} (${st.suspended.length} ${st.suspended.length === 1 ? 'volta' : 'volte'}): il GPS era fermo perché Android ha fermato l'app.</span>`,
-                   st.noSignalTime > 0 && `<span class="text-red-300">🟥 GPS senza segnale per ${fmtDuration(st.noSignalTime)} con l'app attiva${ns ? (ns.gpsOff ? ' (GPS spento nelle impostazioni)' : ` (in media ${ns.used} satelliti usati su ${ns.visible} visibili)`) : ''}.</span>`,
+                ? [st.suspendedTime > 0 && `<span class="text-yellow-300">🟨 Fermato dal sistema per ${fmtDuration(st.suspendedTime)}: ${SYSTEM_CAUSES.filter(c => st.causeTime[c]).map(c => `${CAUSE_LABELS[c]} ${fmtDuration(st.causeTime[c])}`).join(', ')}.</span>`,
+                   st.legacy && '<span class="text-slate-400">Percorso della 2.2: lo stato del GPS non era registrato, un GPS fermato dal sistema può risultare «senza segnale».</span>',
+                   st.noSignalTime > 0 && `<span class="text-red-300">🟥 Senza segnale per ${fmtDuration(st.noSignalTime)} con GPS attivo${st.causeTime.weak >= 30000 ? ` (di cui ${fmtDuration(st.causeTime.weak)} con fix troppo imprecisi)` : ''}${ns && !ns.gpsOff ? `, in media ${ns.used} satelliti usati su ${ns.visible} visibili` : ''}.</span>`,
                    '<span class="text-slate-400">Nel grafico questi periodi valgono velocità zero e abbassano la media.</span>'].filter(Boolean).join('<br>')
                 : `<span class="text-red-300">⚠️ ${fmtDuration(st.gapTime)} senza GPS (${st.gaps.length} ${st.gaps.length === 1 ? 'interruzione' : 'interruzioni'}). Percorso registrato prima della 2.2: non si può distinguere tra app sospesa e mancanza di segnale.</span>`;
             const viewingRec = state.viewing && state.archive.find(r => r.id === state.viewing);
@@ -871,7 +940,7 @@ ${segs.map(s => `    <trkseg>\n${s.map(pt).join('\n')}\n    </trkseg>`).join('\n
             });
             if (el.chartLegend) el.chartLegend.innerHTML = [
                 showV && '<span class="text-sky-400">━</span> velocità', showV && '<span class="text-amber-400">┅</span> media',
-                showA && '<span class="text-emerald-400">━</span> altitudine', '<span class="text-yellow-300">■</span> app sospesa', '<span class="text-red-400">■</span> senza segnale', '<span class="text-slate-400">■</span> pausa'].filter(Boolean).join(' · ');
+                showA && '<span class="text-emerald-400">━</span> altitudine', '<span class="text-yellow-300">■</span> fermato dal sistema', '<span class="text-red-400">■</span> senza segnale', '<span class="text-slate-400">■</span> pausa'].filter(Boolean).join(' · ');
             const dpr = Math.min(window.devicePixelRatio || 1, 3);
             if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
             const ctx = c.getContext('2d');

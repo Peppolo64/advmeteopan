@@ -170,7 +170,7 @@ ok('curve di livello: decodifica Terrarium, intervallo per zoom, marching square
     assert.ok(ring.length > 8 && ring.every(([x1, y1, , , L]) => Math.abs(Math.hypot(x1 - 10, y1 - 10) - Math.sqrt(40)) < 0.5), 'curva a 680 m: cerchio di raggio √40');
 });
 
-// Battiti simulati: [ora, elapsed, uptime, visti, usati, gps, schermo, senza restrizioni, risparmio]
+// Battiti simulati: [ora, elapsed, uptime, visti, usati, gps, schermo, senza restrizioni, risparmio] (formato 2.2)
 function beatsFrom(t0, t1, opts) {
     const o = Object.assign({ every: 5000, sleepFrom: null, sleepTo: null, vis: 12, used: 9, unr: 1, saver: 2, screen: 0 }, opts);
     const out = []; let el = 1e6, up = 1e6;
@@ -210,6 +210,52 @@ ok('buchi GPS classificati: giallo (app sospesa) e rosso (senza segnale, con sat
     assert.deepStrictEqual(st.conditions, { unrestricted: true, saver: 2, screenOffPct: 100 });
     const old = run(pts, RAW, { now: T0 + 499000 }).st;
     assert.ok(!old.classified && old.gapTime > 0, 'percorsi senza battiti: buchi non classificati');
+});
+
+// Battiti 2.3: stato GNSS per ogni battito tramite f(t) -> { vis, used, gnssAge, fixAge, run, gps }
+function beats23(t0, t1, f) {
+    const out = []; let el = 1e6, up = 1e6;
+    for (let t = t0; t <= t1; t += 5000) {
+        el += 5000; up += 5000;
+        const g = Object.assign({ vis: 30, used: 20, gnssAge: 800, fixAge: 900, run: 1, gps: 1 }, f(t));
+        out.push([t, el, up, g.vis, g.used, g.gps, 0, 0, 1, g.gnssAge, g.fixAge, g.run, 1]);
+    }
+    return out;
+}
+
+ok('2.3: GPS fermato dal sistema con l\'app attiva = giallo, non «senza segnale»', () => {
+    const pts = walk(100, 5).concat(walk(100, 5, { from: 300 }));   // buco 100-300 s, battiti regolari
+    const hole = t => t > T0 + 100000 && t < T0 + 300000;
+    const cases = [
+        ['motore GNSS fermato', t => hole(t) ? { run: 0, used: 0, gnssAge: t - T0 - 100000, fixAge: t - T0 - 100000 } : {}, 'blocked'],
+        ['satelliti muti (dati vecchi)', t => hole(t) ? { gnssAge: t - T0 - 100000, fixAge: t - T0 - 100000 } : {}, 'blocked'],
+        ['satelliti agganciati, fix trattenuti', t => hole(t) ? { fixAge: t - T0 - 100000 } : {}, 'held'],
+        ['posizione disattivata', t => hole(t) ? { gps: 0, fixAge: t - T0 - 100000 } : {}, 'gpsoff'],
+    ];
+    for (const [name, f, cause] of cases) {
+        const { st } = run(pts, RAW, { now: T0 + 399000, beats: beats23(T0, T0 + 399000, f) });
+        assert.ok(st.classified && !st.legacy, name);
+        near(st.suspendedTime, 200000, 8000, name + ': fermato dal sistema');
+        assert.ok(st.noSignalTime < 8000, name + ': niente rosso');
+        assert.ok(st.causeTime[cause] > 180000, name + ': causa ' + cause);
+    }
+});
+
+ok('2.3: senza segnale vero (GNSS vivo, pochi satelliti) o fix imprecisi = rosso', () => {
+    const pts = walk(100, 5).concat(walk(100, 5, { from: 300 }));
+    const hole = t => t > T0 + 100000 && t < T0 + 300000;
+    const noSig = run(pts, RAW, { now: T0 + 399000, beats: beats23(T0, T0 + 399000, t => hole(t) ? { vis: 9, used: 0, fixAge: t - T0 - 100000 } : {}) }).st;
+    near(noSig.noSignalTime, 200000, 8000, 'senza segnale'); assert.ok(noSig.suspendedTime < 8000, 'niente giallo');
+    // fix che arrivano ma scartati dal filtro di precisione
+    const bad = walk(100, 5).concat(walk(200, 5, { from: 100 }).map(p => Object.assign(p, { hAcc: 200 })), walk(100, 5, { from: 300 }));
+    const weak = run(bad, RAW, { now: T0 + 399000, beats: beats23(T0, T0 + 399000, () => ({})) }).st;
+    assert.ok(weak.causeTime.weak > 150000 && weak.suspendedTime < 8000, 'fix imprecisi: rosso');
+});
+
+ok('esito della tabella: dati 2.2 marcati come incompleti', () => {
+    const pts = walk(100, 5).concat(walk(100, 5, { from: 300 }));
+    const st = run(pts, RAW, { now: T0 + 399000, beats: beatsFrom(T0, T0 + 399000) }).st;
+    assert.ok(st.legacy, 'battiti 2.2 = classificazione incompleta');
 });
 
 ok('recupero con i battiti e intervalli', () => {

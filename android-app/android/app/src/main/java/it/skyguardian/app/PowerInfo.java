@@ -33,6 +33,17 @@ final class PowerInfo {
         return pm.isInteractive();
     }
 
+    /**
+     * Come il risparmio energetico limita la posizione (Android 9+): 0 nessun limite, 1 GPS spento a schermo spento,
+     * 2 tutta la posizione spenta a schermo spento, 3 posizione solo per l'app in primo piano, 4 richieste rallentate
+     * a schermo spento; -1 non disponibile. Ha effetto solo con il risparmio energetico attivo.
+     */
+    static int locationPowerSaveMode(Context ctx) {
+        if (Build.VERSION.SDK_INT < 28) return -1;
+        PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        return pm.isPowerSaveMode() ? pm.getLocationPowerSaveMode() : 0;
+    }
+
     /** 0 = spento, 1 = standard, 2 = massimo (Samsung, se riconosciuto) */
     static int saverLevel(Context ctx) {
         PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);

@@ -49,9 +49,20 @@ Pannello in fondo (`tracker.js`, plugin Android `TrackerPlugin` + servizio `Trac
 
 **Esegui in background** (switch, solo app): servizio in primo piano con notifica «SkyGuardian sta registrando» e tasti Pausa/Riprendi e Ferma, wake lock parziale durante la registrazione, richiesta di esenzione dall'ottimizzazione batteria e controllo delle impostazioni del telefono (su Samsung: Batteria «Senza restrizioni» e «Consenti attività in background»). I punti sono scritti su file man mano: se il sistema chiude l'app, il percorso si recupera alla riapertura. Senza background il GPS si ferma con l'app: quei periodi valgono velocità zero e abbassano la media. Il workflow ammette solo questo servizio e i relativi permessi; continua a bloccare receiver, avvio automatico e posizione in background.
 
-### App sospesa o GPS senza segnale?
+### Fermato dal sistema o GPS senza segnale?
 
-Durante la registrazione l'app scrive un battito ogni 5 s, indipendente dal GPS, con due orologi di Android (`elapsedRealtime`, che avanza anche nel sonno, e `uptimeMillis`, che si ferma), i satelliti visti/usati e lo stato energetico (batteria senza restrizioni, risparmio energetico spento/Standard/Massimo, schermo). Un buco nei punti GPS con i battiti presenti è **senza segnale** (rosso nel grafico, con i satelliti usati); un buco senza battiti o con il processore addormentato è **app sospesa** (giallo). Nell'archivio ogni percorso mostra le condizioni (correggibili) e la tabella «Confronto delle prove» riassume le 6 combinazioni batteria × risparmio energetico. Il livello «Massimo» di Samsung non ha un'API pubblica: è rilevato dalle impostazioni interne quando possibile.
+Durante la registrazione l'app scrive un battito ogni 5 s, indipendente dal GPS, con due orologi di Android (`elapsedRealtime`, che avanza anche nel sonno, e `uptimeMillis`, che si ferma), i satelliti visti/usati, lo stato energetico e — dalla 2.3 — la **vitalità del GNSS**: da quanto tempo non arrivano aggiornamenti dei satelliti, da quanto non arriva un fix, se il motore GNSS è avviato o fermato, e i limiti del GPS imposti dal risparmio energetico (`getLocationPowerSaveMode`). Ogni buco nei punti è classificato così:
+
+| Situazione nel buco | Classificazione |
+|---|---|
+| battiti assenti o processore addormentato | 🟨 app congelata dal sistema |
+| posizione disattivata | 🟨 posizione disattivata |
+| motore GNSS fermato o satelliti non più aggiornati, con l'app attiva | 🟨 GPS fermato dal sistema |
+| satelliti agganciati (≥ 4 usati) ma nessun fix consegnato | 🟨 posizioni trattenute dal sistema |
+| fix in arrivo ma scartati dai filtri di precisione | 🟥 segnale debole |
+| GNSS attivo e aggiornato, meno di 4 satelliti usati | 🟥 senza segnale |
+
+La tabella «Confronto delle prove» dà l'esito di ogni combinazione batteria × risparmio energetico guardando **solo** il tempo fermato dal sistema (🟨): ✅ zero, ⚠️ meno dell'1% della durata, ❌ 1% o più. Il tempo senza segnale (🟥) dipende dal luogo e non conta. Le prove registrate con la 2.2 non avevano lo stato del GNSS (un GPS fermato dal sistema con l'app viva risultava «senza segnale»): sono indicate come «da ripetere». Il livello «Massimo» di Samsung non ha un'API pubblica: è rilevato dalle impostazioni interne quando possibile.
 
 ## Versione
 

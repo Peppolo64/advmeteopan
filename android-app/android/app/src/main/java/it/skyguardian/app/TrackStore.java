@@ -23,9 +23,10 @@ final class TrackStore {
 
     private static final List<double[]> points = new ArrayList<>();
     private static final List<long[]> pauses = new ArrayList<>();   // [inizio, fine (0 = in corso)]
-    // Battiti ogni 5 s, indipendenti dal GPS: [ora, elapsedRealtime, uptimeMillis, satelliti visti, usati,
+    // Battiti ogni 5 s, indipendenti dal GPS: [ora, elapsedRealtime, uptimeMillis, satelliti visti, usati, (segue)
     // GPS acceso, schermo acceso, batteria senza restrizioni, livello risparmio energetico]
-    static final int HB_FIELDS = 9;
+    // ..., età ultimo aggiornamento satelliti, età ultimo fix, motore GNSS acceso, limiti GPS del risparmio energetico]
+    static final int HB_FIELDS = 13;
     private static final List<long[]> beats = new ArrayList<>();
     private static boolean active = false, background = false, paused = false;
     private static long startedAt = 0;

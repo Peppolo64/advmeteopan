@@ -45,6 +45,9 @@ final class TrackRecorder implements SensorEventListener {
     private Object gnssStatusCallback, gnssMeasurementsCallback, altitudeConverter;
     private volatile float lastPressure = Float.NaN;
     private volatile int satsUsed = -1, satsL5 = -1, satsVisible = -1;
+    // Vitalità del GNSS (elapsedRealtime): ultimo aggiornamento dei satelliti, ultimo fix, motore acceso/fermato
+    private volatile long lastGnssAt = 0, lastFixAt = 0;
+    private volatile int gnssRunning = -1;
     private BeatSink beatSink;
     private final Handler beatHandler = new Handler(Looper.getMainLooper());
     private final Runnable beatTask = new Runnable() {
@@ -52,10 +55,15 @@ final class TrackRecorder implements SensorEventListener {
             if (!running || beatSink == null) return;
             boolean gpsOn = false;
             try { gpsOn = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER); } catch (Exception ignored) { }
+            long now = android.os.SystemClock.elapsedRealtime();
             beatSink.onBeat(new long[] {
-                System.currentTimeMillis(), android.os.SystemClock.elapsedRealtime(), android.os.SystemClock.uptimeMillis(),
+                System.currentTimeMillis(), now, android.os.SystemClock.uptimeMillis(),
                 satsVisible, satsUsed, gpsOn ? 1 : 0, PowerInfo.screenOn(context) ? 1 : 0,
-                PowerInfo.ignoringBatteryOptimizations(context) ? 1 : 0, PowerInfo.saverLevel(context) });
+                PowerInfo.ignoringBatteryOptimizations(context) ? 1 : 0, PowerInfo.saverLevel(context),
+                lastGnssAt > 0 ? now - lastGnssAt : -1,          // età dell'ultimo aggiornamento dei satelliti (ms)
+                lastFixAt > 0 ? now - lastFixAt : -1,            // età dell'ultimo fix GPS ricevuto (ms)
+                gnssRunning,                                     // 1 motore GNSS avviato, 0 fermato, -1 non noto
+                PowerInfo.locationPowerSaveMode(context) });     // limiti del GPS imposti dal risparmio energetico
             beatHandler.postDelayed(this, BEAT_MS);
         }
     };
@@ -140,7 +148,10 @@ final class TrackRecorder implements SensorEventListener {
                     }
                 }
                 satsUsed = used; satsL5 = l5; satsVisible = status.getSatelliteCount();
+                lastGnssAt = android.os.SystemClock.elapsedRealtime();
             }
+            @Override public void onStarted() { gnssRunning = 1; }
+            @Override public void onStopped() { gnssRunning = 0; satsUsed = 0; }
         };
         try {
             locationManager.registerGnssStatusCallback(cb, new Handler(Looper.getMainLooper()));
@@ -163,6 +174,7 @@ final class TrackRecorder implements SensorEventListener {
 
     private void handle(Location location) {
         if (!running) return;
+        lastFixAt = android.os.SystemClock.elapsedRealtime();
         final Location loc = new Location(location);
         final float pressure = lastPressure;
         final int used = satsUsed, l5 = satsL5;
